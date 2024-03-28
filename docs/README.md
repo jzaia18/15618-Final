@@ -61,11 +61,12 @@ The CUDA implementation will be tested on the lab machines.
 The baseline sequential implementation will be done in C++ for fairness.
 
 ## Schedule
-| **Week**     | **Goal**     |
+
+| **Week**     | **Goal**  |
 |--------------|-----------|
-| Apr 1        | Implement sequential version of Baruvka’s algorithm, begin programming CPU-parallel version of Baruvka’s using parlaylib      |
+| Apr 1        | Implement sequential version of Baruvka’s algorithm, begin programming CPU-parallel version of Baruvka’s using parlaylib |
 | Apr 8        | Finish implementation of Baruvka’s using parlaylib |
-| Apr 15\*     | Intermediate milestone deadline (Apr 16). Implement Baruvka’s in CUDA: divide parallelizable code into kernels and ensure correctness (without speedup)      |
-| Apr 22       | Begin optimizing CUDA implementation        |
-| Apr 29       | Fine tune CUDA implementation and start aggregating metrics into a presentation      |
-| May 6\*      | Final poster presentation (May 6)    |
+| Apr 15\*     | Intermediate milestone deadline (Apr 16). Implement Baruvka’s in CUDA: divide parallelizable code into kernels and ensure correctness (without speedup) |
+| Apr 22       | Begin optimizing CUDA implementation |
+| Apr 29       | Fine tune CUDA implementation and start aggregating metrics into a presentation |
+| May 6\*      | Final poster presentation (May 6) |
