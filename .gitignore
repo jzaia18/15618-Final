@@ -4,3 +4,14 @@
 *.ptx
 *.cubin
 *.fatbin
+
+# Object files
+*.o
+*.out
+
+# EMACS backups
+*~
+
+# Graphgen output
+graph.txt
+
