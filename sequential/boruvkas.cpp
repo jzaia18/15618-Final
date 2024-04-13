@@ -34,48 +34,42 @@ std::vector<Edge>* boruvka_mst(int n_vertices, const std::vector<Edge>& edgelist
 
     int n_components = n_vertices;
 
-    // TODO: This only allows MST, not MSF
+    // TODO: This loop condition only allows MST, not MSF
     while (n_components > 1) {
-        // initialize components
-        for (int i = 0; i < n_vertices; i++) {
-            vertices[i].cheapest_edge = nullptr;
-        }
-
         for (const Edge& e : edgelist) {
+            int c1 = get_component(vertices, e.u);
+            int c2 = get_component(vertices, e.v);
+
             // Skip edges that connect a component to itself
-            if (get_component(vertices, e.u) == get_component(vertices, e.v)) {
+            if (c1 == c2) {
                 continue;
             }
 
-            // Check if this edge is the cheapest (so far) for its vertices
-            if (vertices[e.u].cheapest_edge == nullptr or e < *vertices[e.u].cheapest_edge) {
-                vertices[e.u].cheapest_edge = &e;
+            // Check if this edge is the cheapest (so far) for its connected components
+            if (vertices[c1].cheapest_edge == nullptr || e < *vertices[c1].cheapest_edge) {
+                vertices[c1].cheapest_edge = &e;
             }
-            if (vertices[e.v].cheapest_edge == nullptr or e < *vertices[e.v].cheapest_edge) {
-                vertices[e.v].cheapest_edge = &e;
+            if (vertices[c2].cheapest_edge == nullptr || e < *vertices[c2].cheapest_edge) {
+                vertices[c2].cheapest_edge = &e;
             }
         }
 
-        // for (int i = 0; i < n_vertices; i++) {
-        //     if (vertices[i].cheapest_edge != nullptr && vertices[i].component != i) {
-        //         int component = get_component(vertices, i);
-        //         if (vertices[i].cheapest_edge < vertices[component].cheapest_edge) {
-        //             vertices[component].cheapest_edge = vertices[i].cheapest_edge;
-        //         }
-
-        //         vertices[i].cheapest_edge = nullptr;
-        //     }
-        // }
-
         // Connect newest edges to MST
         for (int i = 0; i < n_vertices; i++) {
-            if (vertices[i].cheapest_edge != nullptr) {
-                if (get_component(vertices, vertices[i].cheapest_edge->u) != get_component(vertices, vertices[i].cheapest_edge->v)) {
-                    mst->push_back(*vertices[i].cheapest_edge);
-                    merge_components(vertices, vertices[i].cheapest_edge->u, vertices[i].cheapest_edge->v);
-                    n_components--;
-                }
+            const Edge* edge_ptr = vertices[i].cheapest_edge;
+            if (edge_ptr == nullptr) {
+                continue;
             }
+
+            // if (get_component(vertices, edge_ptr->u) == get_component(vertices, edge_ptr->v)) {
+            //     continue;
+            // }
+
+            mst->push_back(*edge_ptr);
+            vertices[get_component(vertices, edge_ptr->u)].cheapest_edge = nullptr;
+            vertices[get_component(vertices, edge_ptr->v)].cheapest_edge = nullptr;
+            merge_components(vertices, edge_ptr->u, edge_ptr->v);
+            n_components--;
         }
 
     }
@@ -126,13 +120,17 @@ int main(int argc, char **argv) {
     std::vector<Edge>* mst = boruvka_mst(n_vertices, edgelist);
 
     int weight = 0;
+    if (verbose) std::cout << "[";
     for (const Edge& e : *mst) {
         weight += e.weight;
         if (verbose) {
-            std::cout << "(" << e.u << ", " << e.v << " | " << e.weight << ")  ";
+            std::cout << "(" << e.u << ", " << e.v << ", " << e.weight << "), ";
         }
     }
-    std::cout << std::endl << "Total weight: " << weight << std::endl;
+    if (verbose) {
+        std::cout << "]" << std::endl;
+    }
+    std::cout << "Total weight: " << weight << std::endl;
 
     delete mst;
 
