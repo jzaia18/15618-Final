@@ -15,3 +15,5 @@
 # Graphgen output
 graph.txt
 
+# Perf record files
+perf.*
