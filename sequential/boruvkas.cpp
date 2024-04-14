@@ -33,9 +33,10 @@ std::vector<Edge>* boruvka_mst(int n_vertices, const std::vector<Edge>& edgelist
     }
 
     int n_components = n_vertices;
+    bool keep_going;
 
-    // TODO: This loop condition only allows MST, not MSF
-    while (n_components > 1) {
+    do {
+        keep_going = false;
         for (const Edge& e : edgelist) {
             int c1 = get_component(vertices, e.u);
             int c2 = get_component(vertices, e.v);
@@ -54,6 +55,7 @@ std::vector<Edge>* boruvka_mst(int n_vertices, const std::vector<Edge>& edgelist
             }
         }
 
+        keep_going = false;
         // Connect newest edges to MST
         for (int i = 0; i < n_vertices; i++) {
             const Edge* edge_ptr = vertices[i].cheapest_edge;
@@ -70,9 +72,10 @@ std::vector<Edge>* boruvka_mst(int n_vertices, const std::vector<Edge>& edgelist
             vertices[get_component(vertices, edge_ptr->v)].cheapest_edge = nullptr;
             merge_components(vertices, edge_ptr->u, edge_ptr->v);
             n_components--;
+            keep_going = true;
         }
 
-    }
+    } while (keep_going && n_components > 1);
 
     return mst;
 }
