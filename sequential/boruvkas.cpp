@@ -1,5 +1,7 @@
+#include <chrono>
 #include <cstdlib>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -81,6 +83,7 @@ std::vector<Edge>* boruvka_mst(int n_vertices, const std::vector<Edge>& edgelist
 }
 
 int main(int argc, char **argv) {
+    const auto init_start = std::chrono::steady_clock::now();
     int n_vertices;
     int n_edges;
     std::string input_filename;
@@ -110,7 +113,7 @@ int main(int argc, char **argv) {
     fin >> n_vertices;
     fin >> n_edges;
 
-    std::cout << "Graph on " << n_vertices << " vertices and " << n_edges << " edges" << std::endl;
+    std::cout << "Reading graph on " << n_vertices << " vertices and " << n_edges << " edges..." << std::endl;
 
     // Read all edges from file
     std::vector<Edge> edgelist(n_edges);
@@ -120,7 +123,15 @@ int main(int argc, char **argv) {
         fin >> edgelist[i].weight;
     }
 
+    const double init_time = std::chrono::duration_cast<std::chrono::duration<double>>(std::chrono::steady_clock::now() - init_start).count();
+    std::cout << "Initialization time (sec): " << std::fixed << std::setprecision(10) << init_time << '\n';
+
+    const auto compute_start = std::chrono::steady_clock::now();
+
     std::vector<Edge>* mst = boruvka_mst(n_vertices, edgelist);
+
+    const double compute_time = std::chrono::duration_cast<std::chrono::duration<double>>(std::chrono::steady_clock::now() - compute_start).count();
+    std::cout << "Computation time (sec): " << compute_time << '\n';
 
     int weight = 0;
     if (verbose) std::cout << "[";
