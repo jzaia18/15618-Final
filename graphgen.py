@@ -10,7 +10,7 @@ if __name__ == '__main__':
     parser.add_argument('-o', '--outfile', default='graph.txt')
     parser.add_argument('-d', '--density', default=0.5, type=float)
     parser.add_argument('--min-weight', default=1, type=int)
-    parser.add_argument('--max_weight', default=100, type=int)
+    parser.add_argument('--max-weight', default=100, type=int)
     parser.add_argument('-v', '--verbose', action='store_true')
     parser.add_argument('-q', '--quiet', action='store_true')
 
