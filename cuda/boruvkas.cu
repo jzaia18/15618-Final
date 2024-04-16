@@ -1,4 +1,4 @@
-#include <stdio.h>
+#include <chrono>
 #include <string>
 #include <vector>
 
@@ -6,6 +6,8 @@
 #include <cuda_runtime.h>
 #include <driver_functions.h>
 #include <device_launch_parameters.h>
+
+#include <stdio.h>
 
 #include "boruvkas.h"
 
@@ -142,41 +144,43 @@ MST boruvka_mst(int n_vertices, const std::vector<Edge>& edgelist) {
         printf("---------------------------------------------------------\n");
     }
 
-    int a[BLOCKSIZE] = {0};
-    int *d_a;
+    // TODO: all this code is silly, just tests that we have CUDA set up correctly
+    {
+        int a[BLOCKSIZE] = {0};
+        int *d_a;
 
-    // Allocate device memory for a
-    cudaMalloc((void**)&d_a, sizeof(int) * BLOCKSIZE);
+        // Allocate device memory for a
+        cudaMalloc((void**)&d_a, sizeof(int) * BLOCKSIZE);
 
 
-    for (int i = 0; i < BLOCKSIZE; i++) {
-        a[i] = 0;
+        for (int i = 0; i < BLOCKSIZE; i++) {
+            a[i] = 0;
+        }
+        for (int i = 0; i < BLOCKSIZE; i++) {
+            printf("%d ", a[i]);
+        }
+        printf("\n");
+
+
+        // Transfer data from host to device memory
+        cudaMemcpy(d_a, a, sizeof(int) * BLOCKSIZE, cudaMemcpyHostToDevice);
+
+        test<<<1, BLOCKSIZE>>>(d_a);
+
+        // Transfer data from device to host memory
+        cudaMemcpy(a, d_a, sizeof(int) * BLOCKSIZE, cudaMemcpyDeviceToHost);
+
+        for (int i = 0; i < BLOCKSIZE; i++) {
+            printf("%d ", a[i]);
+        }
+        printf("\n");
+
+        cudaFree(d_a);
     }
-    for (int i = 0; i < BLOCKSIZE; i++) {
-        printf("%d ", a[i]);
-    }
-    printf("\n");
-
-    // Transfer data from host to device memory
-    cudaMemcpy(d_a, a, sizeof(int) * BLOCKSIZE, cudaMemcpyHostToDevice);
-
-    test<<<1, BLOCKSIZE>>>(d_a);
-
-    // Transfer data from device to host memory
-    cudaMemcpy(a, d_a, sizeof(int) * BLOCKSIZE, cudaMemcpyDeviceToHost);
-
-    for (int i = 0; i < BLOCKSIZE; i++) {
-        printf("%d ", a[i]);
-    }
-
-    cudaFree(d_a);
-
-    printf("\n");
 
     MST result;
     result.mst = boruvka_mst_helper(n_vertices, edgelist);
 
-    // TODO: replace with parallel scan
     result.weight = 0;
     for (const Edge& e : *result.mst) {
         result.weight += e.weight;
