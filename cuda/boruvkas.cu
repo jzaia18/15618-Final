@@ -53,59 +53,66 @@ inline void merge_components(std::vector<Vertex>& componentlist, const int i, co
     componentlist[get_component(componentlist, i)].component = get_component(componentlist, j);
 }
 
-std::vector<Edge>* boruvka_mst_helper(int n_vertices, const std::vector<Edge>& edgelist) {
+void assign_cheapest(std::vector<Vertex>& vertices, const std::vector<Edge>& edgelist) {
+    for (const Edge& e : edgelist) {
+        int c1 = get_component(vertices, e.u);
+        int c2 = get_component(vertices, e.v);
+
+        // Skip edges that connect a component to itself
+        if (c1 == c2) {
+            continue;
+        }
+
+        // Check if this edge is the cheapest (so far) for its connected components
+        if (vertices[c1].cheapest_edge == nullptr || e < *vertices[c1].cheapest_edge) {
+            vertices[c1].cheapest_edge = &e;
+        }
+        if (vertices[c2].cheapest_edge == nullptr || e < *vertices[c2].cheapest_edge) {
+            vertices[c2].cheapest_edge = &e;
+        }
+    }
+}
+
+int update_mst(std::vector<Vertex>& vertices, const std::vector<Edge>& edgelist, std::vector<Edge>* mst, const int n_vertices) {
+    int n_unions = 0;
+    // Connect newest edges to MST
+    for (int i = 0; i < n_vertices; i++) {
+        const Edge* edge_ptr = vertices[i].cheapest_edge;
+        if (edge_ptr == nullptr) {
+            continue;
+        }
+
+        // if (get_component(vertices, edge_ptr->u) == get_component(vertices, edge_ptr->v)) {
+        //     continue;
+        // }
+
+        mst->push_back(*edge_ptr);
+        vertices[get_component(vertices, edge_ptr->u)].cheapest_edge = nullptr;
+        vertices[get_component(vertices, edge_ptr->v)].cheapest_edge = nullptr;
+        merge_components(vertices, edge_ptr->u, edge_ptr->v);
+        n_unions++;
+    }
+    return n_unions;
+}
+
+std::vector<Edge>* boruvka_mst_helper(const int n_vertices, const std::vector<Edge>& edgelist) {
     std::vector<Edge>* mst = new std::vector<Edge>();
     std::vector<Vertex> vertices(n_vertices);
 
     // initialize components
     for (int i = 0; i < n_vertices; i++) {
-        vertices[i] = Vertex{i, nullptr}; //Vertex{i, i, nullptr};
+        vertices[i] = Vertex{i, nullptr};
     }
 
     int n_components = n_vertices;
-    bool keep_going;
+    int diff;
 
     do {
-        keep_going = false;
-        for (const Edge& e : edgelist) {
-            int c1 = get_component(vertices, e.u);
-            int c2 = get_component(vertices, e.v);
+        assign_cheapest(vertices, edgelist);
 
-            // Skip edges that connect a component to itself
-            if (c1 == c2) {
-                continue;
-            }
-
-            // Check if this edge is the cheapest (so far) for its connected components
-            if (vertices[c1].cheapest_edge == nullptr || e < *vertices[c1].cheapest_edge) {
-                vertices[c1].cheapest_edge = &e;
-            }
-            if (vertices[c2].cheapest_edge == nullptr || e < *vertices[c2].cheapest_edge) {
-                vertices[c2].cheapest_edge = &e;
-            }
-        }
-
-        keep_going = false;
-        // Connect newest edges to MST
-        for (int i = 0; i < n_vertices; i++) {
-            const Edge* edge_ptr = vertices[i].cheapest_edge;
-            if (edge_ptr == nullptr) {
-                continue;
-            }
-
-            // if (get_component(vertices, edge_ptr->u) == get_component(vertices, edge_ptr->v)) {
-            //     continue;
-            // }
-
-            mst->push_back(*edge_ptr);
-            vertices[get_component(vertices, edge_ptr->u)].cheapest_edge = nullptr;
-            vertices[get_component(vertices, edge_ptr->v)].cheapest_edge = nullptr;
-            merge_components(vertices, edge_ptr->u, edge_ptr->v);
-            n_components--;
-            keep_going = true;
-        }
-
-    } while (keep_going && n_components > 1);
+        diff = update_mst(vertices, edgelist, mst, n_vertices);
+        n_components -= diff;
+    } while (diff != 0 && n_components > 1);
 
     return mst;
 }
