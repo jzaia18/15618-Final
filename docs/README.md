@@ -65,6 +65,7 @@ The baseline sequential implementation will be done in C++ for fairness.
 ## Schedule
 
 Ideal Schedule:
+
 | **Week**     | **Date**     | **Goal**  |
 |--------------|--------------|-----------|
 | 1            | Apr 1        | ~~Implement sequential version of Baruvka’s algorithm, begin programming CPU-parallel version of Baruvka’s using parlaylib~~ |
@@ -79,6 +80,7 @@ Ideal Schedule:
 |              | May 6\*      | Final poster presentation |
 
 Backup Schedule (in case of goal pivot, which happens after week 4):
+
 | **Week**     | **Date**     | **Goal**  |
 |--------------|--------------|-----------|
 | 5            | Apr 25       | Implement alternative (wait-free) disjoint-set in parlaylib/open MP - Jake |
