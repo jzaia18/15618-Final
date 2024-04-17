@@ -4,6 +4,8 @@
 *.ptx
 *.cubin
 *.fatbin
+*.DS_Store
+*.vscode/
 
 # Object files
 *.o

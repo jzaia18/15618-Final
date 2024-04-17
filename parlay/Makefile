@@ -5,34 +5,16 @@ JEMALLOC = -L$(JEMALLOCLD) -ljemalloc
 endif
 # TODO get jemalloc working
 
-APP_NAME=boruvkas
-DEBUG_NAME=boruvkas_debug
-
-OBJS=boruvkas.o
-
 CXX = g++
-CXXFLAGS = -Wall -std=c++17 -pthread -I parlaylib/include/ -I. -Wno-unknown-pragmas
-DEBUGFLAGS = -ggdb
+CXXFLAGS = -Wall -std=c++17 -pthread -I parlaylib/include/ -I. -Wno-unknown-pragmas $(JEMALLOC)
 OPTFLAGS = -O3
 
 PARLAYLIB = parlaylib/
-
-all: $(APP_NAME) $(DEBUG_NAME)
-
-debug: $(DEBUG_NAME)
-
-$(DEBUG_NAME): $(PARLAYLIB) $(OBJS)
-	$(CXX) $(DEBUGFLAGS) $(CXXFLAGS) -o $@ $(OBJS)
-
-$(APP_NAME): $(PARLAYLIB) $(OBJS)
-	$(CXX) $(OPTFLAGS) $(CXXFLAGS) -o $@ $(OBJS)
-
-%.o: %.cpp %.h $(EXTRA_HEADERS)
-	$(CXX) $(CXXFLAGS) -ggdb -c $<
+boruvkas: boruvkas.cpp boruvkas.h | $(PARLAYLIB)
+	$(CXX) $(CXXFLAGS) $(OPTFLAGS) -o $@ boruvkas.cpp
 
 $(PARLAYLIB):
 	git clone https://github.com/cmuparlay/parlaylib.git
 
-
 clean:
-	/bin/rm -rf *~ *.o $(APP_NAME) $(DEBUG_NAME)
+	/bin/rm -rf *~ *.o boruvkas
