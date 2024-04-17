@@ -2,13 +2,14 @@
 by Shubham Bhargava & Jake Zaia
 
 ## Links
+* [Project Source Code](https://github.com/jzaia18/15618-Final)
 * [Proposal Document](./proposal.pdf)
 * [Milestone Report](./milestone.pdf)
 
 ## Summary
 We are going to implement an algorithm for finding the Minimum Spanning Tree of a graph in parallel.
-We will be implementing this algorithm in CUDA and comparing its performance to an optimized sequential version of the same algorithm benchmarked on road and social network graph datasets.
-We will additionally be benchmarking against a CPU parallel version implemented using parlaylib graph primitives.
+We will be implementing this algorithm in both [Parlaylib](https://github.com/cmuparlay/parlaylib) and [CUDA](https://developer.nvidia.com/cuda-zone) and comparing their performance to an optimized sequential version of the same algorithm benchmarked on various graph datasets.
+Moreover, we will be experimenting with different implementations of the concurrent disjoint-set datastructure, which is heavily utilized by Boruvka's algorithm and gathering metrics on how different implementations affect performance.
 
 ## Background
 Finding the Minimum Spanning Tree (MST) is a common graph problem with many applications in approximate algorithms, network design, image segmentation, and taxonomy.
@@ -22,7 +23,7 @@ Then we repeat the previous steps until all vertices are connected.
 This is inherently parallel as the minimum edge for each vertex can be calculated in parallel.
 
 ## The Challenge
-Implementing Boruvka’s algorithm is tricky as it requires maintaining a shared disjoint set data structure.
+Implementing Boruvka’s algorithm is tricky as it requires maintaining a shared disjoint-set data structure.
 We have to ensure fast memory access to the disjoint-set while ensuring correctness.
 Optimizing the disjoint-set might involve figuring out ways to break it down into smaller sets that don’t interact with each other as much.
 What makes this truly challenging is that warps in a GPU are SIMD and traversing the disjoint set data structure could result in divergent execution.
@@ -33,6 +34,12 @@ It will be a challenge to choose the most efficient contraction method for this 
 We are hoping to become better CUDA programmers through this project.
 Additionally, we are hoping to apply our knowledge of parallel algorithms beyond just the asymptotics taught in class. 
 We are hoping to implement efficient shared data structures suited to the specific problem at hand.
+
+## Platform Choice
+We will be coding in C++ so we can use [Parlaylib](https://github.com/cmuparlay/parlaylib) for our CPU parallel implementation.
+We will be testing this implementation on the GHC and, if possible, PSC machines to get CPU baselines to compare with our CUDA implementation.
+The CUDA implementation will be tested on the lab machines.
+The baseline sequential implementation will be done in C++ for fairness.
 
 ## Resources
 Since we will be implementing this algorithm in CUDA, we will need access to Nvidia GPUs.
@@ -51,16 +58,42 @@ We are aiming to complete at least 3 of the following 4 goals:
 - [x] Implement an optimized sequential version of MST using Baruvka’s algorithm for benchmarking the parallel version against.
 - [x] Implement a CPU parallel version of Baruvka’s in parlaylib that can be used for further benchmarking.
 - [ ] Implement a parallel version of MST in CUDA that scales near-linearly as more GPU threads are used.
+- [ ] Implement at least 2 meaningfully different versions of a concurrent disjoint-set. Gather significant benchmark data for a parallel implementation of Boruvka’s running using these different implementations.
 
 ### Additional/Stretch Goals
 - [ ] Implement a parallel version of MST that performs close to, or better than, the existing implementations in Open MP and MPI.
 - [ ] Implement an MST-approximation algorithm that performs better than existing MST implementations while getting close to optimal results.
 
-## Platform Choice
-We will be coding in C++ so we can use [Parlaylib](https://github.com/cmuparlay/parlaylib) for our CPU parallel implementation.
-We will be testing this implementation on the GHC and, if possible, PSC machines to get CPU baselines to compare with our CUDA implementation.
-The CUDA implementation will be tested on the lab machines.
-The baseline sequential implementation will be done in C++ for fairness.
+## Current Status
+
+### 2024-04-16
+
+Over the last few weeks we have implemented Boruvka’s algorithm 3 separate times: sequentially in C++, using parlaylib, and using CUDA. 
+The sequential version is lightly optimized for sequential execution and will be used to benchmark our parallel implementations against. 
+For our CPU implementation, we have first translated our implementation to Python (in a functional style). 
+Then, we converted it to parlaylib code ensuring that our code still matches the theoretical guarantees of the algorithm while maximizing usage of parlaylib primitives as they’ve been optimized for memory usage and scheduling. 
+This step involved designing a simple concurrent union-find where we relied on C++ atomics.
+Compare and exchange was also useful in updating shared memory when finding the lightest edge per vertex (the first part of the algorithm). 
+For the GPU parallel implementation, the CUDA code runs and is correct, but is currently not doing any useful parallelization or obtaining any speedup. 
+Optimizing the CUDA implementation will be the focus of the remainder of our effort on this project. 
+
+We have also built up infrastructure for testing our implementations, including a graph generation python script, several datasets, and a python implementation of Kruskal’s algorithm to verify correctness of outputs. 
+While these scripts are not the primary portion of our project, they serve an important role in terms of gathering data to benchmark and analyze our code.
+
+## Challenges Faced
+
+Now that we have working implementations for Boruvka’s algorithm, there are some potential hurdles with parallelizing the algorithm which may be difficult to overcome. 
+Namely, there are several conditioned loops within the algorithm that terminate early or skip iterations.
+These will not perform well for SIMD execution, and we may not be able to circumvent this issue. 
+Thus, for the CUDA implementation, it may be the case that a speedup will be miniscule due to warp stall. 
+We will have to expend considerable effort to mitigate this issue, and may need to pivot our project to instead focus on benchmarking different implementations for parallel disjoint-set and how they affect the runtime of our implementations. 
+This will still produce interesting results since, when trying to parallelize using parlaylib, we realized that there were a lot of different ways to implement the algorithm which made the space of potential optimizations large.
+
+Another challenge has been sourcing data. We expected that it would be easy to get datasets of weighted undirected graphs in similar formats and with various sizes. 
+It turns out that accumulating datasets has been a challenge. 
+We have created a Python script for generating graphs to use as test data in addition to attempting to use open-source data. 
+Obtaining good, diverse, and large datasets remains an ongoing challenge.
+
 
 ## Schedule
 
