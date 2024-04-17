@@ -3,6 +3,7 @@ by Shubham Bhargava & Jake Zaia
 
 ## Links
 * [Proposal Document](./proposal.pdf)
+* [Milestone Report](./milestone.pdf)
 
 ## Summary
 We are going to implement an algorithm for finding the Minimum Spanning Tree of a graph in parallel.
@@ -46,13 +47,14 @@ We can also use the same datasets as the papers used for testing in addition to 
 ## Goals & Deliverables
 
 ### Goals
-* Implement an optimized sequential version of MST using Baruvka’s algorithm for benchmarking the parallel version against.
-* Implement a CPU parallel version of Baruvka’s in parlaylib that can be used for further benchmarking. In the event that we encounter significant difficulty and are unable to implement a CUDA version that achieves good speedup, we will instead use the benchmark data of our parlaylib for analysis.
-* Implement a parallel version of MST in CUDA that scales near-linearly as more GPU threads are used. Since this algorithm is highly parallelizable, we should be able to realize a speedup which scales well.
+We are aiming to complete at least 3 of the following 4 goals:
+- [x] Implement an optimized sequential version of MST using Baruvka’s algorithm for benchmarking the parallel version against.
+- [x] Implement a CPU parallel version of Baruvka’s in parlaylib that can be used for further benchmarking.
+- [ ] Implement a parallel version of MST in CUDA that scales near-linearly as more GPU threads are used.
 
 ### Additional/Stretch Goals
-* Implement a parallel version of MST that performs close to, or better than, the existing implementations in Open MP and MPI.
-* Implement an MST-approximation algorithm that performs better than existing MST implementations while getting close to optimal results.
+- [ ] Implement a parallel version of MST that performs close to, or better than, the existing implementations in Open MP and MPI.
+- [ ] Implement an MST-approximation algorithm that performs better than existing MST implementations while getting close to optimal results.
 
 ## Platform Choice
 We will be coding in C++ so we can use [Parlaylib](https://github.com/cmuparlay/parlaylib) for our CPU parallel implementation.
@@ -62,11 +64,25 @@ The baseline sequential implementation will be done in C++ for fairness.
 
 ## Schedule
 
-| **Week**     | **Goal**  |
-|--------------|-----------|
-| Apr 1        | Implement sequential version of Baruvka’s algorithm, begin programming CPU-parallel version of Baruvka’s using parlaylib |
-| Apr 8        | Finish implementation of Baruvka’s using parlaylib |
-| Apr 15\*     | Intermediate milestone deadline (Apr 16). Implement Baruvka’s in CUDA: divide parallelizable code into kernels and ensure correctness (without speedup) |
-| Apr 22       | Begin optimizing CUDA implementation |
-| Apr 29       | Fine tune CUDA implementation and start aggregating metrics into a presentation |
-| May 6\*      | Final poster presentation (May 6) |
+Ideal Schedule:
+| **Week**     | **Date**     | **Goal**  |
+|--------------|--------------|-----------|
+| 1            | Apr 1        | ~~Implement sequential version of Baruvka’s algorithm, begin programming CPU-parallel version of Baruvka’s using parlaylib~~ |
+| 2            | Apr 8        | ~~Finish implementation of Baruvka’s using parlaylib~~ |
+| 3            | Apr 15\*     | ~~Intermediate milestone deadline (Apr 16). Implement Baruvka’s in CUDA: divide parallelizable code into kernels and ensure correctness (without speedup)~~ |
+| 4            | Apr 19       | Obtain (any) speedup for finding cheapest edge in CUDA - Jake |
+|              | Apr 22       | Implement concurrent disjoint-set data structure in CUDA (ensuring correctness) - Shubham |
+| 5            | Apr 25       | Obtain (any) speedup for graph contraction - Jake |
+|              | Apr 29       | Have working CUDA code with noticeable speedup. Begin dataset collection - Shubham |
+| 6            | May 1        | Fine tune optimizations on CUDA code (remove redundant vertex/edge computation), finalize dataset collection - Jake  |
+|              | May 5        | Gather all metrics and benchmark data on GHC (stretch: PSC as well) - Shubham |
+|              | May 6\*      | Final poster presentation |
+
+Backup Schedule (in case of goal pivot, which happens after week 4):
+| **Week**     | **Date**     | **Goal**  |
+|--------------|--------------|-----------|
+| 5            | Apr 25       | Implement alternative (wait-free) disjoint-set in parlaylib/open MP - Jake |
+|              | Apr 29       | Optimize parlaylib implementation to take advantage of laziness - Shubham |
+| 6            | May 1        | Fine tune optimizations on parlaylib code (remove redundant vertex/edge computation), finalize dataset collection - Jake |
+|              | May 5        | Gather all metrics and benchmark data on GHC & PSC - Shubham |
+|              | May 6\*      | Final poster presentation |
