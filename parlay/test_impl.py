@@ -59,19 +59,25 @@ def main():
     # verts = [i for i in range(n)]
     ds = UnionFind(n)
     t = 0
+    sol = []
     while edges:
 
-        bestv = [(n, math.inf) for _ in range(n)]
-        for [u, v, w] in edges:
-            if w < bestv[u][1]:
-                bestv[u] =  (v, w)
-            if  w < bestv[v][1]:
-                bestv[v] =  (u, w)
+        # use simpler atomics
+        best_edge_index = [-1]*n
+        for i, [u, v, w] in enumerate(edges):
+            
+            if best_edge_index[u] == -1 or w < edges[best_edge_index[u]][2]:
+                best_edge_index[u] = i
 
-        for u, (v, w) in enumerate(bestv):
-            if v == n:
+            if best_edge_index[v] == -1 or w < edges[best_edge_index[v]][2]:
+                best_edge_index[v] = i
+
+        for edge_index in best_edge_index:
+            if edge_index == -1:
                 continue
+            [u, v, w] = edges[edge_index]
             if ds.union(u,v):
+                sol.append((u, v, w))
                 t += w     
 
         # for u in verts:
@@ -98,7 +104,8 @@ def main():
         #     e_prev = e
         # edges = en
 
-        print(len(verts), len(edges))
+        # print(len(edges))
+
 
     print(t)
 MULT = False
