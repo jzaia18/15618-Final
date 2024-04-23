@@ -4,7 +4,6 @@
 #include <iomanip>
 #include <iostream>
 #include <string>
-#include <vector>
 
 #include <unistd.h>
 
@@ -45,7 +44,7 @@ int main(int argc, char **argv){
     std::cout << "Reading graph on " << n_vertices << " vertices and " << n_edges << " edges..." << std::endl;
 
     // Read all edges from file
-    std::vector<Edge> edgelist(n_edges);
+    Edge* edgelist = (Edge*) malloc(n_edges * sizeof(Edge));
     for (int i = 0; i < n_edges; i++) {
         fin >> edgelist[i].u;
         fin >> edgelist[i].v;
@@ -57,21 +56,23 @@ int main(int argc, char **argv){
 
     const auto compute_start = std::chrono::steady_clock::now();
 
-    MST result = boruvka_mst(n_vertices, edgelist);
+    MST result = boruvka_mst(n_vertices, n_edges, edgelist);
 
     const double compute_time = std::chrono::duration_cast<std::chrono::duration<double>>(std::chrono::steady_clock::now() - compute_start).count();
     std::cout << "Computation time (sec): " << compute_time << '\n';
 
     if (verbose) {
         std::cout << "[";
-        for (const Edge& e : *result.mst) {
+        for (int i = 0; i < result.size; i++) {
+            const Edge& e = result.mst[i];
             std::cout << "(" << e.u << ", " << e.v << ", " << e.weight << "), ";
         }
         std::cout << "]" << std::endl;
     }
     std::cout << "Total weight: " << result.weight << std::endl;
 
-    delete result.mst;
+    free(edgelist);
+    free(result.mst);
 
     return EXIT_SUCCESS;
 }

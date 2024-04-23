@@ -1,4 +1,4 @@
-#include <vector>
+#include <unistd.h>
 
 struct Edge {
     int u;
@@ -46,8 +46,10 @@ struct Vertex {
 };
 
 struct MST {
-    std::vector<Edge>* mst;
+    Edge* mst;
+    size_t size;
+    size_t capacity;
     int weight;
 };
 
-MST boruvka_mst(int n_vertices, const std::vector<Edge>& edgelist);
+MST boruvka_mst(const int n_vertices, const int n_edges, const Edge* edgelist);

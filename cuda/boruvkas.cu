@@ -1,6 +1,5 @@
 #include <chrono>
 #include <string>
-#include <vector>
 
 #include <cuda.h>
 #include <cuda_runtime.h>
@@ -38,7 +37,7 @@ __global__ void test(int *a) {
     a[threadID] = threadID;
 }
 
-inline int get_component(std::vector<Vertex>& componentlist, const int i) {
+inline int get_component(Vertex* componentlist, const int i) {
     int curr = componentlist[i].component;
 
     while (componentlist[curr].component != curr) {
@@ -49,12 +48,13 @@ inline int get_component(std::vector<Vertex>& componentlist, const int i) {
     return curr;
 }
 
-inline void merge_components(std::vector<Vertex>& componentlist, const int i, const int j) {
+inline void merge_components(Vertex* componentlist, const int i, const int j) {
     componentlist[get_component(componentlist, i)].component = get_component(componentlist, j);
 }
 
-void assign_cheapest(std::vector<Vertex>& vertices, const std::vector<Edge>& edgelist) {
-    for (const Edge& e : edgelist) {
+void assign_cheapest(Vertex* vertices, const Edge* edgelist, const int n_edges) {
+    for (int i = 0; i < n_edges; i++) {
+        const Edge& e = edgelist[i];
         int c1 = get_component(vertices, e.u);
         int c2 = get_component(vertices, e.v);
 
@@ -73,7 +73,7 @@ void assign_cheapest(std::vector<Vertex>& vertices, const std::vector<Edge>& edg
     }
 }
 
-int update_mst(std::vector<Vertex>& vertices, const std::vector<Edge>& edgelist, std::vector<Edge>* mst, const int n_vertices) {
+int update_mst(Vertex* vertices, const Edge* edgelist, MST& mst, const int n_vertices, const int n_edges) {
     int n_unions = 0;
     // Connect newest edges to MST
     for (int i = 0; i < n_vertices; i++) {
@@ -86,7 +86,7 @@ int update_mst(std::vector<Vertex>& vertices, const std::vector<Edge>& edgelist,
         //     continue;
         // }
 
-        mst->push_back(*edge_ptr);
+        mst.mst[mst.size++] = *edge_ptr;
         vertices[get_component(vertices, edge_ptr->u)].cheapest_edge = nullptr;
         vertices[get_component(vertices, edge_ptr->v)].cheapest_edge = nullptr;
         merge_components(vertices, edge_ptr->u, edge_ptr->v);
@@ -95,9 +95,12 @@ int update_mst(std::vector<Vertex>& vertices, const std::vector<Edge>& edgelist,
     return n_unions;
 }
 
-std::vector<Edge>* boruvka_mst_helper(const int n_vertices, const std::vector<Edge>& edgelist) {
-    std::vector<Edge>* mst = new std::vector<Edge>();
-    std::vector<Vertex> vertices(n_vertices);
+MST boruvka_mst_helper(const int n_vertices, const int n_edges, const Edge* edgelist) {
+    MST mst;
+    mst.size = 0;
+    mst.capacity = n_vertices-1;
+    mst.mst = (Edge*) malloc(sizeof(Edge) * (n_vertices-1));
+    Vertex* vertices = (Vertex*) malloc(sizeof(Vertex) * n_vertices);
 
     // initialize components
     for (int i = 0; i < n_vertices; i++) {
@@ -108,16 +111,16 @@ std::vector<Edge>* boruvka_mst_helper(const int n_vertices, const std::vector<Ed
     int diff;
 
     do {
-        assign_cheapest(vertices, edgelist);
+        assign_cheapest(vertices, edgelist, n_edges);
 
-        diff = update_mst(vertices, edgelist, mst, n_vertices);
+        diff = update_mst(vertices, edgelist, mst, n_vertices, n_edges);
         n_components -= diff;
     } while (diff != 0 && n_components > 1);
 
     return mst;
 }
 
-MST boruvka_mst(int n_vertices, const std::vector<Edge>& edgelist) {
+MST boruvka_mst(const int n_vertices, const int n_edges, const Edge* edgelist) {
     int deviceCount = 0;
     bool isFastGPU = false;
     std::string name;
@@ -185,11 +188,12 @@ MST boruvka_mst(int n_vertices, const std::vector<Edge>& edgelist) {
         cudaFree(d_a);
     }
 
-    MST result;
-    result.mst = boruvka_mst_helper(n_vertices, edgelist);
+    MST result = boruvka_mst_helper(n_vertices, n_edges, edgelist);
 
+    // TODO: Move this into the kernel
     result.weight = 0;
-    for (const Edge& e : *result.mst) {
+    for (int i = 0; i < result.size; i++) {
+        const Edge& e = result.mst[i];
         result.weight += e.weight;
     }
 
