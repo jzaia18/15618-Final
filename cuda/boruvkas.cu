@@ -12,7 +12,7 @@
 
 // Define constants for CUDA threadblocks
 #define THREADBLOCK_WIDTH (8)
-#define THREADBLOCK_HEIGHT (8)
+#define THREADBLOCK_HEIGHT (4)
 #define BLOCKSIZE (THREADBLOCK_WIDTH*THREADBLOCK_HEIGHT)
 
 ////////////////////////////////////////////////////////////////////////////////////////
@@ -31,11 +31,6 @@ struct GlobalConstants {
 // place to put read-only variables).
 __constant__ GlobalConstants cuConstRendererParams;
 
-
-__global__ void test(int *a) {
-    int threadID = threadIdx.y * blockDim.x + threadIdx.x;
-    a[threadID] = threadID;
-}
 
 // Define operators so that edges can be compared
 __device__ inline int edge_cmp(const Edge& lhs, const Edge& rhs)
@@ -65,8 +60,11 @@ __device__ inline void merge_components(Vertex* componentlist, const int i, cons
     componentlist[get_component(componentlist, i)].component = get_component(componentlist, j);
 }
 
-__device__ inline void assign_cheapest(Vertex* vertices, const Edge* edgelist, const int n_edges) {
-    for (int i = 0; i < n_edges; i++) {
+__device__ inline void assign_cheapest(Vertex* vertices, const Edge* edgelist, const int n_edges, const int threadID) {
+    const int start = (threadID * n_edges / BLOCKSIZE);
+    const int end = ((threadID+1) * n_edges / BLOCKSIZE);
+
+    for (int i = start; i < end; i++) {
         const Edge& e = edgelist[i];
         int c1 = get_component(vertices, e.u);
         int c2 = get_component(vertices, e.v);
@@ -121,17 +119,19 @@ __global__ void boruvka_mst_helper(const int n_vertices,
         for (int i = 0; i < n_vertices; i++) {
             vertices[i] = Vertex{i, nullptr};
         }
+    }
 
-        int n_components = n_vertices;
-        int diff;
+    int n_components = n_vertices;
+    int diff;
 
-        do {
-            assign_cheapest(vertices, edgelist, n_edges);
+    do {
+        assign_cheapest(vertices, edgelist, n_edges, threadID);
 
+        if (threadID == 0) {
             diff = update_mst(vertices, edgelist, mst, n_vertices, n_edges);
             n_components -= diff;
-        } while (diff != 0 && n_components > 1);
-    }
+        }
+    } while (mst->size < n_vertices - 1);
 }
 
 MST boruvka_mst(const int n_vertices, const int n_edges, const Edge* edgelist) {
@@ -166,40 +166,6 @@ MST boruvka_mst(const int n_vertices, const int n_edges, const Edge* edgelist) {
                "You're not running on a fast GPU, please consider using "
                "NVIDIA RTX 2080.\n");
         printf("---------------------------------------------------------\n");
-    }
-
-    // TODO: all this code is silly, just tests that we have CUDA set up correctly
-    {
-        int a[BLOCKSIZE] = {0};
-        int *d_a;
-
-        // Allocate device memory for a
-        cudaMalloc((void**)&d_a, sizeof(int) * BLOCKSIZE);
-
-
-        for (int i = 0; i < BLOCKSIZE; i++) {
-            a[i] = 0;
-        }
-        for (int i = 0; i < BLOCKSIZE; i++) {
-            printf("%d ", a[i]);
-        }
-        printf("\n");
-
-
-        // Transfer data from host to device memory
-        cudaMemcpy(d_a, a, sizeof(int) * BLOCKSIZE, cudaMemcpyHostToDevice);
-
-        test<<<1, BLOCKSIZE>>>(d_a);
-
-        // Transfer data from device to host memory
-        cudaMemcpy(a, d_a, sizeof(int) * BLOCKSIZE, cudaMemcpyDeviceToHost);
-
-        for (int i = 0; i < BLOCKSIZE; i++) {
-            printf("%d ", a[i]);
-        }
-        printf("\n");
-
-        cudaFree(d_a);
     }
 
     MST mst;
