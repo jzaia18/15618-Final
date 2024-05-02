@@ -51,6 +51,9 @@ int main(int argc, char **argv){
         fin >> edgelist[i].weight;
     }
 
+    // Preprocess edges by sorting
+    qsort(edgelist, n_edges, sizeof(Edge), qsort_edge_cmp);
+
     const double init_time = std::chrono::duration_cast<std::chrono::duration<double>>(std::chrono::steady_clock::now() - init_start).count();
     std::cout << "Initialization time (sec): " << std::fixed << std::setprecision(10) << init_time << '\n';
 
@@ -64,7 +67,7 @@ int main(int argc, char **argv){
     if (verbose) {
         std::cout << "[";
         for (int i = 0; i < result.size; i++) {
-            const Edge& e = result.mst[i];
+            const Edge& e = edgelist[result.mst[i]];
             std::cout << "(" << e.u << ", " << e.v << ", " << e.weight << "), ";
         }
         std::cout << "]" << std::endl;

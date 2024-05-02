@@ -10,10 +10,13 @@
 
 #include "boruvkas.h"
 
+// TODO: Is it even helpful to think of this as a block for this problem?
 // Define constants for CUDA threadblocks
 #define THREADBLOCK_WIDTH (8)
-#define THREADBLOCK_HEIGHT (4)
+#define THREADBLOCK_HEIGHT (16)
 #define BLOCKSIZE (THREADBLOCK_WIDTH*THREADBLOCK_HEIGHT)
+
+#define NO_EDGE (9999999)
 
 ////////////////////////////////////////////////////////////////////////////////////////
 // All cuda kernels here
@@ -52,7 +55,7 @@ __device__ inline int get_component(Vertex* componentlist, const int i) {
         curr = componentlist[curr].component;
     }
 
-    componentlist[i].component = curr;
+    // componentlist[i].component = curr;
     return curr;
 }
 
@@ -75,12 +78,14 @@ __device__ inline void assign_cheapest(Vertex* vertices, const Edge* edgelist, c
         }
 
         // Check if this edge is the cheapest (so far) for its connected components
-        if (vertices[c1].cheapest_edge == nullptr || edge_cmp(e, *vertices[c1].cheapest_edge) < 0) {
-            vertices[c1].cheapest_edge = &e;
-        }
-        if (vertices[c2].cheapest_edge == nullptr || edge_cmp(e, *vertices[c2].cheapest_edge) < 0) {
-            vertices[c2].cheapest_edge = &e;
-        }
+        atomicMin(&vertices[c1].cheapest_edge, i);
+        atomicMin(&vertices[c2].cheapest_edge, i);
+        // if (vertices[c1].cheapest_edge == NO_EDGE || edge_cmp(e, edgelist[vertices[c1].cheapest_edge]) < 0) {
+        //     vertices[c1].cheapest_edge = i;
+        // }
+        // if (vertices[c2].cheapest_edge == NO_EDGE || edge_cmp(e, edgelist[vertices[c2].cheapest_edge]) < 0) {
+        //     vertices[c2].cheapest_edge = i;
+        // }
     }
 }
 
@@ -88,19 +93,20 @@ __device__ inline int update_mst(Vertex* vertices, const Edge* edgelist, MST* ms
     int n_unions = 0;
     // Connect newest edges to MST
     for (int i = 0; i < n_vertices; i++) {
-        const Edge* edge_ptr = vertices[i].cheapest_edge;
-        if (edge_ptr == nullptr) {
+        const int edge_ind = vertices[i].cheapest_edge;
+        if (edge_ind == NO_EDGE) {
             continue;
         }
+        const Edge& edge_ptr = edgelist[edge_ind];
 
         // if (get_component(vertices, edge_ptr->u) == get_component(vertices, edge_ptr->v)) {
         //     continue;
         // }
 
-        mst->mst[mst->size++] = *edge_ptr;
-        vertices[get_component(vertices, edge_ptr->u)].cheapest_edge = nullptr;
-        vertices[get_component(vertices, edge_ptr->v)].cheapest_edge = nullptr;
-        merge_components(vertices, edge_ptr->u, edge_ptr->v);
+        mst->mst[mst->size++] = edge_ind;
+        vertices[get_component(vertices, edge_ptr.u)].cheapest_edge = NO_EDGE;
+        vertices[get_component(vertices, edge_ptr.v)].cheapest_edge = NO_EDGE;
+        merge_components(vertices, edge_ptr.u, edge_ptr.v);
         n_unions++;
     }
     return n_unions;
@@ -117,7 +123,7 @@ __global__ void boruvka_mst_helper(const int n_vertices,
 
         // initialize components
         for (int i = 0; i < n_vertices; i++) {
-            vertices[i] = Vertex{i, nullptr};
+            vertices[i] = Vertex{i, NO_EDGE};
         }
     }
 
@@ -131,6 +137,8 @@ __global__ void boruvka_mst_helper(const int n_vertices,
             diff = update_mst(vertices, edgelist, mst, n_vertices, n_edges);
             n_components -= diff;
         }
+
+        __syncthreads();
     } while (mst->size < n_vertices - 1);
 }
 
@@ -172,15 +180,15 @@ MST boruvka_mst(const int n_vertices, const int n_edges, const Edge* edgelist) {
     mst.size = 0;
     mst.capacity = n_vertices-1;
     mst.weight = 0;
-    Edge* mst_tree = (Edge*) malloc(sizeof(Edge) * (n_vertices-1));
+    int* mst_tree = (int*) malloc(sizeof(int) * (n_vertices-1));
 
     MST* device_mst;
-    Edge* device_mst_tree;
+    int* device_mst_tree;
     Vertex* device_vertices;
     Edge* device_edgelist;
 
     cudaMalloc(&device_mst, sizeof(MST));
-    cudaMalloc(&device_mst_tree, sizeof(Edge) * (n_vertices-1));
+    cudaMalloc(&device_mst_tree, sizeof(int) * (n_vertices-1));
     cudaMalloc(&device_vertices, sizeof(Vertex) * n_vertices);
     cudaMalloc(&device_edgelist, sizeof(Edge) * n_edges);
 
@@ -191,7 +199,7 @@ MST boruvka_mst(const int n_vertices, const int n_edges, const Edge* edgelist) {
     boruvka_mst_helper<<<1, BLOCKSIZE>>>(n_vertices, n_edges, device_edgelist, device_vertices, device_mst);
 
     cudaMemcpy(&mst, device_mst, sizeof(MST), cudaMemcpyDeviceToHost);
-    cudaMemcpy(mst_tree, device_mst_tree, sizeof(Edge) * mst.size, cudaMemcpyDeviceToHost);
+    cudaMemcpy(mst_tree, device_mst_tree, sizeof(int) * mst.size, cudaMemcpyDeviceToHost);
     mst.mst = mst_tree;
 
     cudaFree(device_mst);
@@ -201,7 +209,7 @@ MST boruvka_mst(const int n_vertices, const int n_edges, const Edge* edgelist) {
 
     // TODO: Move this into the kernel
     for (int i = 0; i < mst.size; i++) {
-        const Edge& e = mst.mst[i];
+        const Edge& e = edgelist[mst.mst[i]];
         mst.weight += e.weight;
     }
 
