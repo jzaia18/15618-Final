@@ -33,14 +33,15 @@ std::vector<Edge>* boruvka_mst(int n_vertices, const std::vector<Edge>& edgelist
 
     // initialize components
     for (int i = 0; i < n_vertices; i++) {
-        vertices[i] = Vertex{i, nullptr}; //Vertex{i, i, nullptr};
+        vertices[i] = Vertex{i, NO_EDGE};
     }
 
     int n_components = n_vertices;
     bool keep_going;
 
     do {
-        for (const Edge& e : edgelist) {
+        for (int i = 0; i < edgelist.size(); i++) {
+            const Edge& e = edgelist[i];
             int c1 = get_component(vertices, e.u);
             int c2 = get_component(vertices, e.v);
 
@@ -50,31 +51,33 @@ std::vector<Edge>* boruvka_mst(int n_vertices, const std::vector<Edge>& edgelist
             }
 
             // Check if this edge is the cheapest (so far) for its connected components
-            if (vertices[c1].cheapest_edge == nullptr || e < *vertices[c1].cheapest_edge) {
-                vertices[c1].cheapest_edge = &e;
+            if (vertices[c1].cheapest_edge == NO_EDGE || e < edgelist[vertices[c1].cheapest_edge]) {
+                vertices[c1].cheapest_edge = i;
             }
-            if (vertices[c2].cheapest_edge == nullptr || e < *vertices[c2].cheapest_edge) {
-                vertices[c2].cheapest_edge = &e;
+            if (vertices[c2].cheapest_edge == NO_EDGE || e < edgelist[vertices[c2].cheapest_edge]) {
+                vertices[c2].cheapest_edge = i;
             }
         }
 
         keep_going = false;
         // Connect newest edges to MST
         for (int i = 0; i < n_vertices; i++) {
-            const Edge* edge_ptr = vertices[i].cheapest_edge;
-            if (edge_ptr == nullptr) {
+            const int edge_ind = vertices[i].cheapest_edge;
+            if (edge_ind == NO_EDGE) {
                 continue;
             }
 
-            vertices[i].cheapest_edge = nullptr;
-            if (get_component(vertices, edge_ptr->u) == get_component(vertices, edge_ptr->v)) {
+            const Edge edge = edgelist[edge_ind];
+
+            vertices[i].cheapest_edge = NO_EDGE;
+            if (get_component(vertices, edge.u) == get_component(vertices, edge.v)) {
                 continue;
             }
 
-            mst->push_back(*edge_ptr);
+            mst->push_back(edge);
             // vertices[get_component(vertices, edge_ptr->u)].cheapest_edge = nullptr;
             // vertices[get_component(vertices, edge_ptr->v)].cheapest_edge = nullptr;
-            merge_components(vertices, edge_ptr->u, edge_ptr->v);
+            merge_components(vertices, edge.u, edge.v);
             n_components--;
             keep_going = true;
         }
