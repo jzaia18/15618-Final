@@ -51,10 +51,21 @@ if __name__ == '__main__':
     ## Generate Connected Caveman Graphs
 
     # caveman_1000 = nx.connected_caveman_graph(100, 10)
-    # to_output_file(caveman_1000, arbitrary_weight(1, 500), f'{OUTDIR}/caveman_n1000.txt')
+    # to_output_file(caveman_1000, arbitrary_weight(1, 500), f'{OUTDIR}/conn_caveman_n1000.txt')
 
     # caveman_62500 = nx.connected_caveman_graph(2000, 25)
-    # to_output_file(caveman_62500, arbitrary_weight(1, 500), f'{OUTDIR}/caveman_n62500.txt')
+    # to_output_file(caveman_62500, arbitrary_weight(1, 500), f'{OUTDIR}/conn_caveman_n62500.txt')
 
     # caveman_200000 = nx.connected_caveman_graph(5000, 40)
+    # to_output_file(caveman_200000, arbitrary_weight(1, 500), f'{OUTDIR}/conn_caveman_n200000.txt')
+
+    # caveman_360000 = nx.connected_caveman_graph(6000, 60)
+    # to_output_file(caveman_360000, arbitrary_weight(1, 500), f'{OUTDIR}/conn_caveman_n360000.txt')
+
+    ## Generated (Disconnected) Caveman Graphs
+
+    # caveman_200000 = nx.caveman_graph(5000, 40)
     # to_output_file(caveman_200000, arbitrary_weight(1, 500), f'{OUTDIR}/caveman_n200000.txt')
+
+    # caveman_360000 = nx.caveman_graph(6000, 60)
+    # to_output_file(caveman_360000, arbitrary_weight(1, 500), f'{OUTDIR}/caveman_n360000.txt')
