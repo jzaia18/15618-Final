@@ -55,7 +55,9 @@ __device__ inline int get_component(Vertex* componentlist, const int i) {
         curr = componentlist[curr].component;
     }
 
-    // componentlist[i].component = curr;
+    if (componentlist[i].component != curr) {
+        atomicExch(&componentlist[i].component, curr);
+    }
     return curr;
 }
 
