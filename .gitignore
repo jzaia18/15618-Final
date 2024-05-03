@@ -13,6 +13,7 @@
 
 # EMACS backups
 *~
+flycheck*
 
 # Graphgen output
 graph.txt

@@ -47,3 +47,14 @@ if __name__ == '__main__':
 
     # hypercube_262144 = nx.hypercube_graph(18)
     # to_output_file(hypercube_262144, arbitrary_weight(1, 500), f'{OUTDIR}/hypercube_n262144.txt', nodename_to_idx=hypercube_idx)
+
+    ## Generate Connected Caveman Graphs
+
+    # caveman_1000 = nx.connected_caveman_graph(100, 10)
+    # to_output_file(caveman_1000, arbitrary_weight(1, 500), f'{OUTDIR}/caveman_n1000.txt')
+
+    # caveman_62500 = nx.connected_caveman_graph(2000, 25)
+    # to_output_file(caveman_62500, arbitrary_weight(1, 500), f'{OUTDIR}/caveman_n62500.txt')
+
+    # caveman_200000 = nx.connected_caveman_graph(5000, 40)
+    # to_output_file(caveman_200000, arbitrary_weight(1, 500), f'{OUTDIR}/caveman_n200000.txt')
