@@ -22,7 +22,7 @@ struct MST {
 
 MST boruvka_mst(const int n_vertices, const int n_edges, const Edge* edgelist);
 
-inline int qsort_edge_cmp(const void *_lhs, const void *_rhs)
+inline int edge_cmp(const void *_lhs, const void *_rhs)
 {
     const Edge& lhs = *((const Edge*)_lhs);
     const Edge& rhs = *((const Edge*)_rhs);

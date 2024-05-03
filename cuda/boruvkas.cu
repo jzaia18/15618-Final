@@ -7,6 +7,7 @@
 #include <device_launch_parameters.h>
 
 #include <stdio.h>
+#include <limits.h>
 
 #include "boruvkas.h"
 
@@ -16,7 +17,7 @@
 #define THREADBLOCK_HEIGHT (16)
 #define BLOCKSIZE (THREADBLOCK_WIDTH*THREADBLOCK_HEIGHT)
 
-#define NO_EDGE (9999999)
+#define NO_EDGE (INT_MAX)
 
 ////////////////////////////////////////////////////////////////////////////////////////
 // All cuda kernels here
@@ -35,19 +36,6 @@ struct GlobalConstants {
 __constant__ GlobalConstants cuConstRendererParams;
 
 
-// Define operators so that edges can be compared
-__device__ inline int edge_cmp(const Edge& lhs, const Edge& rhs)
-{
-    const int sub = lhs.weight - rhs.weight;
-    if (sub) {
-        return sub;
-    }
-    if (lhs.u == rhs.u) {
-        return (lhs.v - rhs.v);
-    }
-    return (lhs.u - rhs.u);
-}
-
 __device__ inline int get_component(Vertex* componentlist, const int i) {
     int curr = componentlist[i].component;
 
@@ -55,6 +43,7 @@ __device__ inline int get_component(Vertex* componentlist, const int i) {
         curr = componentlist[curr].component;
     }
 
+    // Flatten component trees
     if (componentlist[i].component != curr) {
         atomicExch(&componentlist[i].component, curr);
     }
@@ -62,7 +51,10 @@ __device__ inline int get_component(Vertex* componentlist, const int i) {
 }
 
 __device__ inline void merge_components(Vertex* componentlist, const int i, const int j) {
-    componentlist[get_component(componentlist, i)].component = get_component(componentlist, j);
+    componentlist[get_component(componentlist, i)].component = j;
+    // const int ci = get_component(componentlist, i);
+    // const int cj = get_component(componentlist, j);
+    // componentlist[ci].component = cj;
 }
 
 __device__ inline void assign_cheapest(Vertex* vertices, const Edge* edgelist, const int n_edges, const int threadID) {
@@ -71,17 +63,24 @@ __device__ inline void assign_cheapest(Vertex* vertices, const Edge* edgelist, c
 
     for (int i = start; i < end; i++) {
         const Edge& e = edgelist[i];
-        int c1 = get_component(vertices, e.u);
-        int c2 = get_component(vertices, e.v);
+        const int c1 = get_component(vertices, e.u);
+        const int c2 = get_component(vertices, e.v);
 
         // Skip edges that connect a component to itself
         if (c1 == c2) {
             continue;
         }
 
-        // Check if this edge is the cheapest (so far) for its connected components
-        atomicMin(&vertices[c1].cheapest_edge, i);
-        atomicMin(&vertices[c2].cheapest_edge, i);
+        if (i < vertices[c1].cheapest_edge) {
+            atomicMin(&vertices[c1].cheapest_edge, i);
+        }
+        if (i < vertices[c2].cheapest_edge) {
+            atomicMin(&vertices[c2].cheapest_edge, i);
+        }
+
+        // atomicMin(&vertices[c1].cheapest_edge, i);
+        // atomicMin(&vertices[c2].cheapest_edge, i);
+
         // if (vertices[c1].cheapest_edge == NO_EDGE || edge_cmp(e, edgelist[vertices[c1].cheapest_edge]) < 0) {
         //     vertices[c1].cheapest_edge = i;
         // }
@@ -96,12 +95,14 @@ __device__ inline int update_mst(Vertex* vertices, const Edge* edgelist, MST* ms
     // Connect newest edges to MST
     for (int i = 0; i < n_vertices; i++) {
         const int edge_ind = vertices[i].cheapest_edge;
+
         if (edge_ind == NO_EDGE) {
             continue;
         }
+
         const Edge& edge_ptr = edgelist[edge_ind];
 
-        // if (get_component(vertices, edge_ptr->u) == get_component(vertices, edge_ptr->v)) {
+        // if (get_component(vertices, edge_ptr.u) == get_component(vertices, edge_ptr.v)) {
         //     continue;
         // }
 
@@ -128,12 +129,15 @@ __global__ void boruvka_mst_helper(const int n_vertices,
             vertices[i] = Vertex{i, NO_EDGE};
         }
     }
+    __syncthreads();
 
     int n_components = n_vertices;
     int diff;
 
     do {
         assign_cheapest(vertices, edgelist, n_edges, threadID);
+
+        __syncthreads();
 
         if (threadID == 0) {
             diff = update_mst(vertices, edgelist, mst, n_vertices, n_edges);

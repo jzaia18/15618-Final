@@ -52,7 +52,7 @@ int main(int argc, char **argv){
     }
 
     // Preprocess edges by sorting
-    qsort(edgelist, n_edges, sizeof(Edge), qsort_edge_cmp);
+    qsort(edgelist, n_edges, sizeof(Edge), edge_cmp);
 
     const double init_time = std::chrono::duration_cast<std::chrono::duration<double>>(std::chrono::steady_clock::now() - init_start).count();
     std::cout << "Initialization time (sec): " << std::fixed << std::setprecision(10) << init_time << '\n';
