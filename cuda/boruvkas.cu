@@ -14,7 +14,7 @@
 // TODO: Is it even helpful to think of this as a block for this problem?
 // Define constants for CUDA threadblocks
 #define THREADBLOCK_WIDTH (8)
-#define THREADBLOCK_HEIGHT (16)
+#define THREADBLOCK_HEIGHT (8)
 #define BLOCKSIZE (THREADBLOCK_WIDTH*THREADBLOCK_HEIGHT)
 
 #define NO_EDGE (INT_MAX)
@@ -120,19 +120,9 @@ __global__ void boruvka_mst_helper(const int n_vertices,
                                    const Edge* edgelist,
                                    Vertex* vertices,
                                    MST* mst) {
-    int threadID = threadIdx.y * blockDim.x + threadIdx.x;
+    const int threadID = threadIdx.y * blockDim.x + threadIdx.x;
 
-    if (threadID == 0) {
-
-        // initialize components
-        for (int i = 0; i < n_vertices; i++) {
-            vertices[i] = Vertex{i, NO_EDGE};
-        }
-    }
-    __syncthreads();
-
-    int n_components = n_vertices;
-    int diff;
+    __shared__ int diff;
 
     do {
         assign_cheapest(vertices, edgelist, n_edges, threadID);
@@ -141,11 +131,23 @@ __global__ void boruvka_mst_helper(const int n_vertices,
 
         if (threadID == 0) {
             diff = update_mst(vertices, edgelist, mst, n_vertices, n_edges);
-            n_components -= diff;
         }
 
         __syncthreads();
-    } while (mst->size < n_vertices - 1);
+    } while (diff != 0);
+}
+
+__global__ void init_arrs(const int n_vertices,
+                          Vertex* vertices) {
+    const int threadID = threadIdx.y * blockDim.x + threadIdx.x;
+
+    const int start = (threadID * n_vertices / BLOCKSIZE);
+    const int end = ((threadID+1) * n_vertices / BLOCKSIZE);
+
+    // initialize components
+    for (int i = start; i < end; i++) {
+        vertices[i] = Vertex{i, NO_EDGE};
+    }
 }
 
 MST boruvka_mst(const int n_vertices, const int n_edges, const Edge* edgelist) {
@@ -202,18 +204,23 @@ MST boruvka_mst(const int n_vertices, const int n_edges, const Edge* edgelist) {
     mst.mst = device_mst_tree;
     cudaMemcpy(device_mst, &mst, sizeof(MST), cudaMemcpyHostToDevice);
 
+    // Run Boruvka's in parallel
+    init_arrs<<<1, BLOCKSIZE>>>(n_vertices, device_vertices);
     boruvka_mst_helper<<<1, BLOCKSIZE>>>(n_vertices, n_edges, device_edgelist, device_vertices, device_mst);
 
+    // Copy run results off of device
     cudaMemcpy(&mst, device_mst, sizeof(MST), cudaMemcpyDeviceToHost);
     cudaMemcpy(mst_tree, device_mst_tree, sizeof(int) * mst.size, cudaMemcpyDeviceToHost);
     mst.mst = mst_tree;
 
+    // Clean up device memory
     cudaFree(device_mst);
     cudaFree(device_mst_tree);
     cudaFree(device_vertices);
     cudaFree(device_edgelist);
 
-    // TODO: Move this into the kernel
+    // TODO: Move this into the kernel that performs a scan
+    // Compute final weight
     for (int i = 0; i < mst.size; i++) {
         const Edge& e = edgelist[mst.mst[i]];
         mst.weight += e.weight;
