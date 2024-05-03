@@ -170,7 +170,7 @@ __global__ void init_arrs(const int n_vertices,
     }
 }
 
-MST boruvka_mst(const int n_vertices, const int n_edges, const Edge* edgelist) {
+void initGPUs() {
     int deviceCount = 0;
     bool isFastGPU = false;
     std::string name;
@@ -203,7 +203,9 @@ MST boruvka_mst(const int n_vertices, const int n_edges, const Edge* edgelist) {
                "NVIDIA RTX 2080.\n");
         printf("---------------------------------------------------------\n");
     }
+}
 
+MST boruvka_mst(const int n_vertices, const int n_edges, const Edge* edgelist) {
     MST mst;
     mst.size = 0;
     mst.capacity = n_vertices-1;

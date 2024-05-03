@@ -89,12 +89,16 @@ int main(int argc, char **argv) {
     std::string input_filename;
     bool verbose = false;
     bool bin = false;
+    uint reps = 1;
 
     int opt;
-    while ((opt = getopt(argc, argv, "f:abv")) != -1) {
+    while ((opt = getopt(argc, argv, "f:abvr:")) != -1) {
         switch (opt) {
             case 'f':
                 input_filename = optarg;
+                break;
+            case 'r':
+                reps = strtol(optarg, NULL, 10);
                 break;
             case 'v':
                 verbose = true;
@@ -106,7 +110,7 @@ int main(int argc, char **argv) {
                 bin = true;
                 break;
             default:
-                std::cerr << "Usage: " << argv[0] << " -f [-a] [-b] input_filename [-v]\n";
+                std::cerr << "Usage: " << argv[0] << " [-a] [-b] -f input_filename [-r reps] [-v]\n";
                 exit(EXIT_FAILURE);
         }
     }
@@ -155,27 +159,29 @@ int main(int argc, char **argv) {
     const double init_time = std::chrono::duration_cast<std::chrono::duration<double>>(std::chrono::steady_clock::now() - init_start).count();
     std::cout << "Initialization time (sec): " << std::fixed << std::setprecision(10) << init_time << '\n';
 
-    const auto compute_start = std::chrono::steady_clock::now();
+    for (uint i = 0; i < reps; i++) {
+        const auto compute_start = std::chrono::steady_clock::now();
 
-    std::vector<Edge>* mst = boruvka_mst(n_vertices, edgelist);
+        std::vector<Edge>* mst = boruvka_mst(n_vertices, edgelist);
 
-    const double compute_time = std::chrono::duration_cast<std::chrono::duration<double>>(std::chrono::steady_clock::now() - compute_start).count();
-    std::cout << "Computation time (sec): " << compute_time << '\n';
+        const double compute_time = std::chrono::duration_cast<std::chrono::duration<double>>(std::chrono::steady_clock::now() - compute_start).count();
+        std::cout << "Computation time (sec): " << compute_time << '\n';
 
-    int weight = 0;
-    if (verbose) std::cout << "[";
-    for (const Edge& e : *mst) {
-        weight += e.weight;
-        if (verbose) {
-            std::cout << "(" << e.u << ", " << e.v << ", " << e.weight << "), ";
+        int weight = 0;
+        if (verbose) std::cout << "[";
+        for (const Edge& e : *mst) {
+            weight += e.weight;
+            if (verbose) {
+                std::cout << "(" << e.u << ", " << e.v << ", " << e.weight << "), ";
+            }
         }
-    }
-    if (verbose) {
-        std::cout << "]" << std::endl;
-    }
-    std::cout << "Total weight: " << weight << std::endl;
+        if (verbose) {
+            std::cout << "]" << std::endl;
+        }
+        std::cout << "Total weight: " << weight << std::endl;
 
-    delete mst;
+        delete mst;
+    }
 
     return EXIT_SUCCESS;
 }
