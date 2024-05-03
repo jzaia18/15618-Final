@@ -28,6 +28,9 @@ struct GlobalConstants {
     // TODO
 };
 
+// Another global value
+__device__ int n_components;
+
 // Global variable that is in scope, but read-only, for all cuda
 // kernels.  The __constant__ modifier designates this variable will
 // be stored in special "constant" memory on the GPU. (we didn't talk
@@ -57,7 +60,11 @@ __device__ inline void merge_components(Vertex* componentlist, const int i, cons
     // componentlist[ci].component = cj;
 }
 
-__device__ inline void assign_cheapest(Vertex* vertices, const Edge* edgelist, const int n_edges, const int threadID) {
+__global__ void assign_cheapest(Vertex* vertices,
+                                const Edge* edgelist,
+                                const int n_edges) {
+    const int threadID = threadIdx.y * blockDim.x + threadIdx.x;
+
     const int start = (threadID * n_edges / BLOCKSIZE);
     const int end = ((threadID+1) * n_edges / BLOCKSIZE);
 
@@ -90,7 +97,16 @@ __device__ inline void assign_cheapest(Vertex* vertices, const Edge* edgelist, c
     }
 }
 
-__device__ inline int update_mst(Vertex* vertices, const Edge* edgelist, MST* mst, const int n_vertices, const int n_edges) {
+
+__global__ void update_mst(Vertex* vertices,
+                                 const Edge* edgelist,
+                                 MST* mst,
+                                 const int n_vertices,
+                                 const int n_edges) {
+    const int threadID = threadIdx.y * blockDim.x + threadIdx.x;
+
+    if (threadID != 0) return;
+
     int n_unions = 0;
     // Connect newest edges to MST
     for (int i = 0; i < n_vertices; i++) {
@@ -112,30 +128,30 @@ __device__ inline int update_mst(Vertex* vertices, const Edge* edgelist, MST* ms
         merge_components(vertices, edge_ptr.u, edge_ptr.v);
         n_unions++;
     }
-    return n_unions;
+    atomicSub(&n_components, n_unions);
 }
 
-__global__ void boruvka_mst_helper(const int n_vertices,
-                                   const int n_edges,
-                                   const Edge* edgelist,
-                                   Vertex* vertices,
-                                   MST* mst) {
-    const int threadID = threadIdx.y * blockDim.x + threadIdx.x;
+// __global__ void boruvka_mst_helper(const int n_vertices,
+//                                    const int n_edges,
+//                                    const Edge* edgelist,
+//                                    Vertex* vertices,
+//                                    MST* mst) {
+//     const int threadID = threadIdx.y * blockDim.x + threadIdx.x;
 
-    __shared__ int diff;
+//     __shared__ int diff;
 
-    do {
-        assign_cheapest(vertices, edgelist, n_edges, threadID);
+//     do {
+//         assign_cheapest(vertices, edgelist, n_edges, threadID);
 
-        __syncthreads();
+//         __syncthreads();
 
-        if (threadID == 0) {
-            diff = update_mst(vertices, edgelist, mst, n_vertices, n_edges);
-        }
+//         if (threadID == 0) {
+//             diff = update_mst(vertices, edgelist, mst, n_vertices, n_edges);
+//         }
 
-        __syncthreads();
-    } while (diff != 0);
-}
+//         __syncthreads();
+//     } while (diff != 0);
+// }
 
 __global__ void init_arrs(const int n_vertices,
                           Vertex* vertices) {
@@ -147,6 +163,10 @@ __global__ void init_arrs(const int n_vertices,
     // initialize components
     for (int i = start; i < end; i++) {
         vertices[i] = Vertex{i, NO_EDGE};
+    }
+
+    if (threadID == 0) {
+        n_components = n_vertices;
     }
 }
 
@@ -206,7 +226,16 @@ MST boruvka_mst(const int n_vertices, const int n_edges, const Edge* edgelist) {
 
     // Run Boruvka's in parallel
     init_arrs<<<1, BLOCKSIZE>>>(n_vertices, device_vertices);
-    boruvka_mst_helper<<<1, BLOCKSIZE>>>(n_vertices, n_edges, device_edgelist, device_vertices, device_mst);
+    int n_comp = n_vertices;
+    int n_comp_old;
+
+    do {
+        n_comp_old = n_comp;
+        assign_cheapest<<<1, BLOCKSIZE>>>(device_vertices, device_edgelist, n_edges);
+
+        update_mst<<<1, BLOCKSIZE>>>(device_vertices, device_edgelist, device_mst, n_vertices, n_edges);
+        cudaMemcpyFromSymbol(&n_comp, n_components, sizeof(int));
+    } while (n_comp != n_comp_old && n_comp > 1);
 
     // Copy run results off of device
     cudaMemcpy(&mst, device_mst, sizeof(MST), cudaMemcpyDeviceToHost);
