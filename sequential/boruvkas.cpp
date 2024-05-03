@@ -11,14 +11,16 @@
 #include "boruvkas.h"
 
 inline int get_component(std::vector<Vertex>& componentlist, const int i) {
-    int curr = componentlist[i].component;
+    int curr = i;
+    int ahead = componentlist[i].component;
 
-    while (componentlist[curr].component != curr) {
-        curr = componentlist[curr].component;
+    while (componentlist[ahead].component != ahead) {
+        componentlist[curr].component = componentlist[ahead].component;
+        curr = ahead;
+        ahead = componentlist[ahead].component;
     }
 
-    componentlist[i].component = curr;
-    return curr;
+    return ahead;
 }
 
 inline void merge_components(std::vector<Vertex>& componentlist, const int i, const int j) {
@@ -38,7 +40,6 @@ std::vector<Edge>* boruvka_mst(int n_vertices, const std::vector<Edge>& edgelist
     bool keep_going;
 
     do {
-        keep_going = false;
         for (const Edge& e : edgelist) {
             int c1 = get_component(vertices, e.u);
             int c2 = get_component(vertices, e.v);
@@ -65,13 +66,14 @@ std::vector<Edge>* boruvka_mst(int n_vertices, const std::vector<Edge>& edgelist
                 continue;
             }
 
-            // if (get_component(vertices, edge_ptr->u) == get_component(vertices, edge_ptr->v)) {
-            //     continue;
-            // }
+            vertices[i].cheapest_edge = nullptr;
+            if (get_component(vertices, edge_ptr->u) == get_component(vertices, edge_ptr->v)) {
+                continue;
+            }
 
             mst->push_back(*edge_ptr);
-            vertices[get_component(vertices, edge_ptr->u)].cheapest_edge = nullptr;
-            vertices[get_component(vertices, edge_ptr->v)].cheapest_edge = nullptr;
+            // vertices[get_component(vertices, edge_ptr->u)].cheapest_edge = nullptr;
+            // vertices[get_component(vertices, edge_ptr->v)].cheapest_edge = nullptr;
             merge_components(vertices, edge_ptr->u, edge_ptr->v);
             n_components--;
             keep_going = true;
