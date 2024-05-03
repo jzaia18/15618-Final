@@ -47,7 +47,7 @@ export: $(EXFILES)
 	cp -p $(EXFILES) $(STARTER)
 
 
-$(EXECUTABLE): dirs $(OBJS)
+$(EXECUTABLE): dirs $(OBJS) boruvkas.h
 		$(CXX) $(CXXFLAGS) -o $@ $(OBJS) $(LDFLAGS) $(LDLIBS) $(LDFRAMEWORKS)
 
 $(OBJDIR)/%.o: %.cpp
