@@ -46,18 +46,18 @@ __device__ inline int get_component(Vertex* componentlist, const int i) {
         curr = componentlist[curr].component;
     }
 
-    // Flatten component trees
-    if (componentlist[i].component != curr) {
-        atomicExch(&componentlist[i].component, curr);
-    }
     return curr;
 }
 
 __device__ inline void merge_components(Vertex* componentlist, const int i, const int j) {
-    componentlist[get_component(componentlist, i)].component = j;
-    // const int ci = get_component(componentlist, i);
-    // const int cj = get_component(componentlist, j);
-    // componentlist[ci].component = cj;
+
+    int u = i;
+    int v = j;
+    int old;
+    do {
+        u = get_component(componentlist, u);
+        old = atomicCAS(&(componentlist[u].component), u, v);
+    } while (old != u);
 }
 
 __global__ void assign_cheapest(Vertex* vertices,
