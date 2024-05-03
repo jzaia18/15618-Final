@@ -16,9 +16,10 @@ int main(int argc, char **argv){
     int n_edges;
     std::string input_filename;
     bool verbose = false;
+    bool bin = false;
 
     int opt;
-    while ((opt = getopt(argc, argv, "f:v")) != -1) {
+    while ((opt = getopt(argc, argv, "f:abv")) != -1) {
         switch (opt) {
             case 'f':
                 input_filename = optarg;
@@ -26,29 +27,60 @@ int main(int argc, char **argv){
             case 'v':
                 verbose = true;
                 break;
+            case 'a':
+                bin = false;
+                break;
+            case 'b':
+                bin = true;
+                break;
             default:
-                std::cerr << "Usage: " << argv[0] << " -f input_filename [-v]\n";
+                std::cerr << "Usage: " << argv[0] << " -f [-a] [-b] input_filename [-v]\n";
                 exit(EXIT_FAILURE);
         }
     }
 
-    std::ifstream fin(input_filename);
-    if (!fin) {
-        std::cerr << "Unable to open file: " << input_filename << std::endl;
-        exit(EXIT_FAILURE);
-    }
+    Edge* edgelist;
 
-    fin >> n_vertices;
-    fin >> n_edges;
+    if (bin) {
+        std::ifstream fin(input_filename, std::ios::binary);
 
-    std::cout << "Reading graph on " << n_vertices << " vertices and " << n_edges << " edges..." << std::endl;
+        if (!fin) {
+            std::cerr << "Unable to open file: " << input_filename << std::endl;
+            exit(EXIT_FAILURE);
+        }
 
-    // Read all edges from file
-    Edge* edgelist = (Edge*) malloc(n_edges * sizeof(Edge));
-    for (int i = 0; i < n_edges; i++) {
-        fin >> edgelist[i].u;
-        fin >> edgelist[i].v;
-        fin >> edgelist[i].weight;
+        fin.read((char*)&n_vertices, sizeof(int));
+        fin.read((char*)&n_edges, sizeof(int));
+
+        std::cout << "Reading graph on " << n_vertices << " vertices and " << n_edges << " edges..." << std::endl;
+
+        // Read all edges from file
+        edgelist = (Edge*) malloc(n_edges * sizeof(Edge));
+        for (int i = 0; i < n_edges; i++) {
+            fin.read((char*)&edgelist[i], 3 * sizeof(int));
+            // fin >> edgelist[i].v;
+            // fin >> edgelist[i].weight;
+        }
+    } else {
+        std::ifstream fin(input_filename);
+
+        if (!fin) {
+            std::cerr << "Unable to open file: " << input_filename << std::endl;
+            exit(EXIT_FAILURE);
+        }
+
+        fin >> n_vertices;
+        fin >> n_edges;
+
+        std::cout << "Reading graph on " << n_vertices << " vertices and " << n_edges << " edges..." << std::endl;
+
+        // Read all edges from file
+        edgelist = (Edge*) malloc(n_edges * sizeof(Edge));
+        for (int i = 0; i < n_edges; i++) {
+            fin >> edgelist[i].u;
+            fin >> edgelist[i].v;
+            fin >> edgelist[i].weight;
+        }
     }
 
     // Preprocess edges by sorting
