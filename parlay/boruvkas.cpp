@@ -1,11 +1,11 @@
 #include "boruvkas.h"
 
 #include <unistd.h>
+#include <chrono>
 #include <iostream>
 #include <string>
 
 #include "parlaylib/examples/helper/graph_utils.h"
-#include "parlaylib/include/parlay/internal/get_time.h"
 #include "parlaylib/include/parlay/primitives.h"
 #include "parlaylib/include/parlay/sequence.h"
 
@@ -16,6 +16,8 @@ using vertex = int;
 using wtype = uint;
 
 int main(int argc, char* argv[]) {
+    const auto init_start = std::chrono::steady_clock::now();
+
     std::string input_filename;
     bool bin = false;
     uint reps = 1;
@@ -88,10 +90,22 @@ int main(int argc, char* argv[]) {
         }
     }
 
+    const double init_time = std::chrono::duration_cast<std::chrono::duration<double>>(std::chrono::steady_clock::now() - init_start).count();
+    std::cout << "Initialization time (sec): " << std::fixed << std::setprecision(10) << init_time << '\n';
+
     parlay::sequence<vertex> result;
-    parlay::internal::timer t("Time");
     for (uint i = 0; i < reps; i++) {
-        boruvka<vertex, wtype>(E, n);
-        t.next("boruvka");
+        const auto compute_start = std::chrono::steady_clock::now();
+        auto sol = boruvka<vertex, wtype>(E, n);
+
+        const double compute_time = std::chrono::duration_cast<std::chrono::duration<double>>(std::chrono::steady_clock::now() - compute_start).count();
+        std::cout << "Computation time (sec): " << compute_time << '\n';
+
+        int total_weight = 0;
+        for (auto [u, v, w] : sol) {
+            total_weight += w;
+        }
+
+        std::cout << "Total weight: " << total_weight << std::endl;
     }
 }
