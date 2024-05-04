@@ -64,12 +64,11 @@ int main(int argc, char **argv){
 
         std::cout << "Reading graph on " << n_vertices << " vertices and " << n_edges << " edges..." << std::endl;
 
-        // Read all edges from file
+        // Read all edges from file, this assumes a very particular binary file layout
         edgelist = (Edge*) malloc(n_edges * sizeof(Edge));
-        for (ullong i = 0; i < n_edges; i++) {
-            fin.read((char*)&edgelist[i], 3 * sizeof(uint));
-        }
+        fin.read((char*)edgelist, n_edges * 3 * sizeof(uint));
     } else {
+        // NOTE: Only use text files for very small graphs, this is very slow
         std::ifstream fin(input_filename);
 
         if (!fin) {
@@ -85,14 +84,15 @@ int main(int argc, char **argv){
         // Read all edges from file
         edgelist = (Edge*) malloc(n_edges * sizeof(Edge));
         for (ullong i = 0; i < n_edges; i++) {
-            fin >> edgelist[i].u;
-            fin >> edgelist[i].v;
-            fin >> edgelist[i].weight;
+            uint u, v, w;
+            fin >> u;
+            fin >> v;
+            fin >> w;
+            edgelist[i].u = u;
+            edgelist[i].v = v;
+            edgelist[i].weight = w;
         }
     }
-
-    // Preprocess edges by sorting
-    // qsort(edgelist, n_edges, sizeof(Edge), edge_cmp);
 
     initGPUs();
 

@@ -2,7 +2,7 @@
 
 typedef unsigned long long ullong ;
 
-struct Edge {
+struct __attribute__((packed)) Edge {
     uint u;
     uint v;
     uint weight;

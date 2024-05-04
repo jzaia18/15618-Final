@@ -10,9 +10,9 @@
 
 #include "boruvkas.h"
 
-inline int get_component(std::vector<Vertex>& componentlist, const int i) {
-    int curr = i;
-    int ahead = componentlist[i].component;
+inline ulong get_component(std::vector<Vertex>& componentlist, const ulong i) {
+    ulong curr = i;
+    ulong ahead = componentlist[i].component;
 
     while (componentlist[ahead].component != ahead) {
         componentlist[curr].component = componentlist[ahead].component;
@@ -23,27 +23,27 @@ inline int get_component(std::vector<Vertex>& componentlist, const int i) {
     return ahead;
 }
 
-inline void merge_components(std::vector<Vertex>& componentlist, const int i, const int j) {
+inline void merge_components(std::vector<Vertex>& componentlist, const ulong i, const ulong j) {
     componentlist[get_component(componentlist, i)].component = get_component(componentlist, j);
 }
 
-std::vector<Edge>* boruvka_mst(int n_vertices, const std::vector<Edge>& edgelist) {
+std::vector<Edge>* boruvka_mst(ulong n_vertices, const std::vector<Edge>& edgelist) {
     std::vector<Edge>* mst = new std::vector<Edge>();
     std::vector<Vertex> vertices(n_vertices);
 
     // initialize components
-    for (int i = 0; i < n_vertices; i++) {
+    for (uint i = 0; i < n_vertices; i++) {
         vertices[i] = Vertex{i, NO_EDGE};
     }
 
-    int n_components = n_vertices;
+    ulong n_components = n_vertices;
     bool keep_going;
 
     do {
-        for (int i = 0; i < edgelist.size(); i++) {
+        for (uint i = 0; i < edgelist.size(); i++) {
             const Edge& e = edgelist[i];
-            int c1 = get_component(vertices, e.u);
-            int c2 = get_component(vertices, e.v);
+            ulong c1 = get_component(vertices, e.u);
+            ulong c2 = get_component(vertices, e.v);
 
             // Skip edges that connect a component to itself
             if (c1 == c2) {
@@ -61,8 +61,8 @@ std::vector<Edge>* boruvka_mst(int n_vertices, const std::vector<Edge>& edgelist
 
         keep_going = false;
         // Connect newest edges to MST
-        for (int i = 0; i < n_vertices; i++) {
-            const int edge_ind = vertices[i].cheapest_edge;
+        for (uint i = 0; i < n_vertices; i++) {
+            const ulong edge_ind = vertices[i].cheapest_edge;
             if (edge_ind == NO_EDGE) {
                 continue;
             }
@@ -89,8 +89,8 @@ std::vector<Edge>* boruvka_mst(int n_vertices, const std::vector<Edge>& edgelist
 
 int main(int argc, char **argv) {
     const auto init_start = std::chrono::steady_clock::now();
-    int n_vertices;
-    int n_edges;
+    ulong n_vertices;
+    ulong n_edges;
     std::string input_filename;
     bool verbose = false;
     bool bin = false;
@@ -130,16 +130,20 @@ int main(int argc, char **argv) {
             exit(EXIT_FAILURE);
         }
 
-        fin.read((char*)&n_vertices, sizeof(int));
-        fin.read((char*)&n_edges, sizeof(int));
+        // NOTE: File encoding is 4-byte not 8-byte
+        {
+            uint n, m;
+            fin.read((char*)&n, sizeof(unsigned int));
+            fin.read((char*)&m, sizeof(unsigned int));
+            n_vertices = n;
+            n_edges = m;
+        }
 
         std::cout << "Reading graph on " << n_vertices << " vertices and " << n_edges << " edges..." << std::endl;
 
-        // Read all edges from file
+        // Read all edges from file, this assumes a very particular binary file layout
         edgelist = std::vector<Edge>(n_edges);
-        for (int i = 0; i < n_edges; i++) {
-            fin.read((char*)&edgelist[i], 3 * sizeof(int));
-        }
+        fin.read((char*)edgelist.data(), n_edges * 3 * sizeof(uint));
     } else {
         std::ifstream fin(input_filename);
         if (!fin) {
@@ -154,10 +158,14 @@ int main(int argc, char **argv) {
 
         // Read all edges from file
         edgelist = std::vector<Edge>(n_edges);
-        for (int i = 0; i < n_edges; i++) {
-            fin >> edgelist[i].u;
-            fin >> edgelist[i].v;
-            fin >> edgelist[i].weight;
+        for (uint i = 0; i < n_edges; i++) {
+            uint u, v, w;
+            fin >> u;
+            fin >> v;
+            fin >> w;
+            edgelist[i].u = u;
+            edgelist[i].v = v;
+            edgelist[i].weight = w;
         }
     }
 

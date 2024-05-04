@@ -2,10 +2,10 @@
 
 #define NO_EDGE (INT_MAX)
 
-struct Edge {
-    int u;
-    int v;
-    int weight;
+struct __attribute__((packed)) Edge {
+    uint u;
+    uint v;
+    uint weight;
 
     // Define operators so that edges can be compared
     bool operator <(const Edge& rhs) const
@@ -43,7 +43,7 @@ struct Edge {
 struct Vertex {
     // the index of the vertex is implied since vertices are stored in a vector
     // int index;
-    int component;
-    int cheapest_edge; // the index of the cheapest edge
+    ulong component;
+    ulong cheapest_edge; // the index of the cheapest edge
     // const Edge* cheapest_edge;
 };
