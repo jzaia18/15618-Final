@@ -20,3 +20,10 @@ graph.txt
 
 # Perf record files
 perf.*
+
+# Testfiles (unless explicitly included)
+testfiles/
+
+# Python files
+*.pyc
+__pycache__/

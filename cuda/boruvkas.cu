@@ -146,7 +146,7 @@ __global__ void update_mst(Vertex* vertices, const Edge* edgelist, MST* mst,
     atomicSub(&n_components, n_unions);
 }
 
-MST boruvka_mst(const int n_vertices, const int n_edges, const Edge* edgelist) {
+void initGPUs() {
     int deviceCount = 0;
     bool isFastGPU = false;
     std::string name;
@@ -179,7 +179,9 @@ MST boruvka_mst(const int n_vertices, const int n_edges, const Edge* edgelist) {
             "NVIDIA RTX 2080.\n");
         printf("---------------------------------------------------------\n");
     }
+}
 
+MST boruvka_mst(const int n_vertices, const int n_edges, const Edge* edgelist) {
     MST mst;
     mst.weight = 0;
     int* mst_tree = (int*)malloc(sizeof(int) * n_edges);

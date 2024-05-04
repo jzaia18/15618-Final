@@ -3,25 +3,42 @@ import random
 
 from typing import Any, Callable
 
-def arbitrary_weight(low: int, high: int) -> Callable[[int, int], int]:
+def arbitrary_weight(low: int, high: int, seed: int=0) -> Callable[[int, int], int]:
+    random.seed(seed)
     return lambda _a, _b: random.randint(low, high)
 
 def to_output_file(g: nx.classes.graph.Graph,
                    decide_weight: Callable[[Any, Any], int],
                    fname: str,
+                   binary: bool=False,
                    nodename_to_idx: Callable[[Any], int]= lambda x: int(x)) -> None:
-    with open(fname, 'w') as f:
-        f.write(f'{g.number_of_nodes()} {g.number_of_edges()}\n')
 
-        for edge in g.edges:
-            # Convert edge names to index
-            u = nodename_to_idx(edge[0])
-            v = nodename_to_idx(edge[1])
-            f.write(f'{u} {v} {decide_weight(edge[0], edge[1])}\n')
+    if binary:
+        to_bin = lambda num: int(num).to_bytes(length=4, byteorder='little')
+        with open(fname, 'wb') as f:
+            f.write(to_bin(g.number_of_nodes()))
+            f.write(to_bin(g.number_of_edges()))
+
+            for edge in g.edges:
+                # Convert edge names to index
+                u = nodename_to_idx(edge[0])
+                v = nodename_to_idx(edge[1])
+                f.write(to_bin(u))
+                f.write(to_bin(v))
+                f.write(to_bin(decide_weight(edge[0], edge[1])))
+    else:
+        with open(fname, 'w') as f:
+            f.write(f'{g.number_of_nodes()} {g.number_of_edges()}\n')
+
+            for edge in g.edges:
+                # Convert edge names to index
+                u = nodename_to_idx(edge[0])
+                v = nodename_to_idx(edge[1])
+                f.write(f'{u} {v} {decide_weight(edge[0], edge[1])}\n')
 
 
 if __name__ == '__main__':
-    OUTDIR = 'testfiles'
+    OUTDIR = '../testfiles'
 
     ## Generate Circulant Graphs
 

@@ -10,19 +10,22 @@
 #include "boruvkas.h"
 
 int main(int argc, char **argv){
-
     const auto init_start = std::chrono::steady_clock::now();
     int n_vertices;
     int n_edges;
     std::string input_filename;
     bool verbose = false;
     bool bin = false;
+    uint reps = 1;
 
     int opt;
-    while ((opt = getopt(argc, argv, "f:abv")) != -1) {
+    while ((opt = getopt(argc, argv, "f:abvr:")) != -1) {
         switch (opt) {
             case 'f':
                 input_filename = optarg;
+                break;
+            case 'r':
+                reps = strtol(optarg, NULL, 10);
                 break;
             case 'v':
                 verbose = true;
@@ -34,7 +37,7 @@ int main(int argc, char **argv){
                 bin = true;
                 break;
             default:
-                std::cerr << "Usage: " << argv[0] << " -f [-a] [-b] input_filename [-v]\n";
+                std::cerr << "Usage: " << argv[0] << " [-a] [-b] -f input_filename [-r reps] [-v]\n";
                 exit(EXIT_FAILURE);
         }
     }
@@ -58,8 +61,6 @@ int main(int argc, char **argv){
         edgelist = (Edge*) malloc(n_edges * sizeof(Edge));
         for (int i = 0; i < n_edges; i++) {
             fin.read((char*)&edgelist[i], 3 * sizeof(int));
-            // fin >> edgelist[i].v;
-            // fin >> edgelist[i].weight;
         }
     } else {
         std::ifstream fin(input_filename);
@@ -84,32 +85,37 @@ int main(int argc, char **argv){
     }
 
     // Preprocess edges by sorting
-   // qsort(edgelist, n_edges, sizeof(Edge), edge_cmp);
+    // qsort(edgelist, n_edges, sizeof(Edge), edge_cmp);
+
+    initGPUs();
 
     const double init_time = std::chrono::duration_cast<std::chrono::duration<double>>(std::chrono::steady_clock::now() - init_start).count();
     std::cout << "Initialization time (sec): " << std::fixed << std::setprecision(10) << init_time << '\n';
 
-    const auto compute_start = std::chrono::steady_clock::now();
+    for (uint i = 0; i < reps; i++) {
+        const auto compute_start = std::chrono::steady_clock::now();
 
-    MST result = boruvka_mst(n_vertices, n_edges, edgelist);
+        MST result = boruvka_mst(n_vertices, n_edges, edgelist);
 
-    const double compute_time = std::chrono::duration_cast<std::chrono::duration<double>>(std::chrono::steady_clock::now() - compute_start).count();
-    std::cout << "Computation time (sec): " << compute_time << '\n';
+        const double compute_time = std::chrono::duration_cast<std::chrono::duration<double>>(std::chrono::steady_clock::now() - compute_start).count();
+        std::cout << "Computation time (sec): " << compute_time << '\n';
 
-    if (verbose) {
-        std::cout << "[";
-        for (int i = 0; i < n_edges; i++) {
-            if (result.mst[i] == 1) {
-                const Edge& e = edgelist[i];
-                std::cout << "(" << e.u << ", " << e.v << ", " << e.weight << "), ";
+        if (verbose) {
+            std::cout << "[";
+            for (int i = 0; i < n_edges; i++) {
+                if (result.mst[i] == 1) {
+                    const Edge& e = edgelist[i];
+                    std::cout << "(" << e.u << ", " << e.v << ", " << e.weight << "), ";
+                }
             }
+            std::cout << "]" << std::endl;
         }
-        std::cout << "]" << std::endl;
+
+        std::cout << "Total weight: " << result.weight << std::endl;
+        free(result.mst);
     }
-    std::cout << "Total weight: " << result.weight << std::endl;
 
     free(edgelist);
-    free(result.mst);
 
     return EXIT_SUCCESS;
 }

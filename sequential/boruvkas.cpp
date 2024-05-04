@@ -11,14 +11,16 @@
 #include "boruvkas.h"
 
 inline int get_component(std::vector<Vertex>& componentlist, const int i) {
-    int curr = componentlist[i].component;
+    int curr = i;
+    int ahead = componentlist[i].component;
 
-    while (componentlist[curr].component != curr) {
-        curr = componentlist[curr].component;
+    while (componentlist[ahead].component != ahead) {
+        componentlist[curr].component = componentlist[ahead].component;
+        curr = ahead;
+        ahead = componentlist[ahead].component;
     }
 
-    componentlist[i].component = curr;
-    return curr;
+    return ahead;
 }
 
 inline void merge_components(std::vector<Vertex>& componentlist, const int i, const int j) {
@@ -31,15 +33,15 @@ std::vector<Edge>* boruvka_mst(int n_vertices, const std::vector<Edge>& edgelist
 
     // initialize components
     for (int i = 0; i < n_vertices; i++) {
-        vertices[i] = Vertex{i, nullptr}; //Vertex{i, i, nullptr};
+        vertices[i] = Vertex{i, NO_EDGE};
     }
 
     int n_components = n_vertices;
     bool keep_going;
 
     do {
-        keep_going = false;
-        for (const Edge& e : edgelist) {
+        for (int i = 0; i < edgelist.size(); i++) {
+            const Edge& e = edgelist[i];
             int c1 = get_component(vertices, e.u);
             int c2 = get_component(vertices, e.v);
 
@@ -49,30 +51,33 @@ std::vector<Edge>* boruvka_mst(int n_vertices, const std::vector<Edge>& edgelist
             }
 
             // Check if this edge is the cheapest (so far) for its connected components
-            if (vertices[c1].cheapest_edge == nullptr || e < *vertices[c1].cheapest_edge) {
-                vertices[c1].cheapest_edge = &e;
+            if (vertices[c1].cheapest_edge == NO_EDGE || e < edgelist[vertices[c1].cheapest_edge]) {
+                vertices[c1].cheapest_edge = i;
             }
-            if (vertices[c2].cheapest_edge == nullptr || e < *vertices[c2].cheapest_edge) {
-                vertices[c2].cheapest_edge = &e;
+            if (vertices[c2].cheapest_edge == NO_EDGE || e < edgelist[vertices[c2].cheapest_edge]) {
+                vertices[c2].cheapest_edge = i;
             }
         }
 
         keep_going = false;
         // Connect newest edges to MST
         for (int i = 0; i < n_vertices; i++) {
-            const Edge* edge_ptr = vertices[i].cheapest_edge;
-            if (edge_ptr == nullptr) {
+            const int edge_ind = vertices[i].cheapest_edge;
+            if (edge_ind == NO_EDGE) {
                 continue;
             }
 
-            // if (get_component(vertices, edge_ptr->u) == get_component(vertices, edge_ptr->v)) {
-            //     continue;
-            // }
+            const Edge edge = edgelist[edge_ind];
 
-            mst->push_back(*edge_ptr);
-            vertices[get_component(vertices, edge_ptr->u)].cheapest_edge = nullptr;
-            vertices[get_component(vertices, edge_ptr->v)].cheapest_edge = nullptr;
-            merge_components(vertices, edge_ptr->u, edge_ptr->v);
+            vertices[i].cheapest_edge = NO_EDGE;
+            if (get_component(vertices, edge.u) == get_component(vertices, edge.v)) {
+                continue;
+            }
+
+            mst->push_back(edge);
+            // vertices[get_component(vertices, edge_ptr->u)].cheapest_edge = nullptr;
+            // vertices[get_component(vertices, edge_ptr->v)].cheapest_edge = nullptr;
+            merge_components(vertices, edge.u, edge.v);
             n_components--;
             keep_going = true;
         }
@@ -88,65 +93,100 @@ int main(int argc, char **argv) {
     int n_edges;
     std::string input_filename;
     bool verbose = false;
+    bool bin = false;
+    uint reps = 1;
 
     int opt;
-    while ((opt = getopt(argc, argv, "f:v")) != -1) {
+    while ((opt = getopt(argc, argv, "f:abvr:")) != -1) {
         switch (opt) {
             case 'f':
                 input_filename = optarg;
                 break;
+            case 'r':
+                reps = strtol(optarg, NULL, 10);
+                break;
             case 'v':
                 verbose = true;
                 break;
+            case 'a':
+                bin = false;
+                break;
+            case 'b':
+                bin = true;
+                break;
             default:
-                std::cerr << "Usage: " << argv[0] << " -f input_filename [-v]\n";
+                std::cerr << "Usage: " << argv[0] << " [-a] [-b] -f input_filename [-r reps] [-v]\n";
                 exit(EXIT_FAILURE);
         }
     }
 
-    std::ifstream fin(input_filename);
-    if (!fin) {
-        std::cerr << "Unable to open file: " << input_filename << std::endl;
-        exit(EXIT_FAILURE);
-    }
+    std::vector<Edge> edgelist;
 
-    fin >> n_vertices;
-    fin >> n_edges;
+    if (bin) {
+        std::ifstream fin(input_filename, std::ios::binary);
 
-    std::cout << "Reading graph on " << n_vertices << " vertices and " << n_edges << " edges..." << std::endl;
+        if (!fin) {
+            std::cerr << "Unable to open file: " << input_filename << std::endl;
+            exit(EXIT_FAILURE);
+        }
 
-    // Read all edges from file
-    std::vector<Edge> edgelist(n_edges);
-    for (int i = 0; i < n_edges; i++) {
-        fin >> edgelist[i].u;
-        fin >> edgelist[i].v;
-        fin >> edgelist[i].weight;
+        fin.read((char*)&n_vertices, sizeof(int));
+        fin.read((char*)&n_edges, sizeof(int));
+
+        std::cout << "Reading graph on " << n_vertices << " vertices and " << n_edges << " edges..." << std::endl;
+
+        // Read all edges from file
+        edgelist = std::vector<Edge>(n_edges);
+        for (int i = 0; i < n_edges; i++) {
+            fin.read((char*)&edgelist[i], 3 * sizeof(int));
+        }
+    } else {
+        std::ifstream fin(input_filename);
+        if (!fin) {
+            std::cerr << "Unable to open file: " << input_filename << std::endl;
+            exit(EXIT_FAILURE);
+        }
+
+        fin >> n_vertices;
+        fin >> n_edges;
+
+        std::cout << "Reading graph on " << n_vertices << " vertices and " << n_edges << " edges..." << std::endl;
+
+        // Read all edges from file
+        edgelist = std::vector<Edge>(n_edges);
+        for (int i = 0; i < n_edges; i++) {
+            fin >> edgelist[i].u;
+            fin >> edgelist[i].v;
+            fin >> edgelist[i].weight;
+        }
     }
 
     const double init_time = std::chrono::duration_cast<std::chrono::duration<double>>(std::chrono::steady_clock::now() - init_start).count();
     std::cout << "Initialization time (sec): " << std::fixed << std::setprecision(10) << init_time << '\n';
 
-    const auto compute_start = std::chrono::steady_clock::now();
+    for (uint i = 0; i < reps; i++) {
+        const auto compute_start = std::chrono::steady_clock::now();
 
-    std::vector<Edge>* mst = boruvka_mst(n_vertices, edgelist);
+        std::vector<Edge>* mst = boruvka_mst(n_vertices, edgelist);
 
-    const double compute_time = std::chrono::duration_cast<std::chrono::duration<double>>(std::chrono::steady_clock::now() - compute_start).count();
-    std::cout << "Computation time (sec): " << compute_time << '\n';
+        const double compute_time = std::chrono::duration_cast<std::chrono::duration<double>>(std::chrono::steady_clock::now() - compute_start).count();
+        std::cout << "Computation time (sec): " << compute_time << '\n';
 
-    int weight = 0;
-    if (verbose) std::cout << "[";
-    for (const Edge& e : *mst) {
-        weight += e.weight;
-        if (verbose) {
-            std::cout << "(" << e.u << ", " << e.v << ", " << e.weight << "), ";
+        int weight = 0;
+        if (verbose) std::cout << "[";
+        for (const Edge& e : *mst) {
+            weight += e.weight;
+            if (verbose) {
+                std::cout << "(" << e.u << ", " << e.v << ", " << e.weight << "), ";
+            }
         }
-    }
-    if (verbose) {
-        std::cout << "]" << std::endl;
-    }
-    std::cout << "Total weight: " << weight << std::endl;
+        if (verbose) {
+            std::cout << "]" << std::endl;
+        }
+        std::cout << "Total weight: " << weight << std::endl;
 
-    delete mst;
+        delete mst;
+    }
 
     return EXIT_SUCCESS;
 }

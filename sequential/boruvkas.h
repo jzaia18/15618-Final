@@ -1,3 +1,7 @@
+#include <limits.h>
+
+#define NO_EDGE (INT_MAX)
+
 struct Edge {
     int u;
     int v;
@@ -40,5 +44,6 @@ struct Vertex {
     // the index of the vertex is implied since vertices are stored in a vector
     // int index;
     int component;
-    const Edge* cheapest_edge;
+    int cheapest_edge; // the index of the cheapest edge
+    // const Edge* cheapest_edge;
 };

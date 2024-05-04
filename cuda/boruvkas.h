@@ -19,6 +19,7 @@ struct MST {
 };
 
 MST boruvka_mst(const int n_vertices, const int n_edges, const Edge* edgelist);
+void initGPUs();
 
 inline int edge_cmp(const void *_lhs, const void *_rhs)
 {

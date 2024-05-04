@@ -71,12 +71,5 @@ auto boruvka(const parlay::sequence<edge<vertex, wtype>>& E, vertex n) {
             });
     }
 
-    int t = 0;
-    for (auto [u, v, w] : sol) {
-        t += w;
-    }
-
-    std::cout << t << std::endl;
-
     return sol;
 }
