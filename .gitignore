@@ -20,6 +20,7 @@ graph.txt
 
 # Perf record files
 perf.*
+profile.*
 
 # Testfiles (unless explicitly included)
 testfiles/
