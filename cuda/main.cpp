@@ -5,14 +5,15 @@
 #include <iostream>
 #include <string>
 
+#include <sys/types.h>
 #include <unistd.h>
 
 #include "boruvkas.h"
 
 int main(int argc, char **argv){
     const auto init_start = std::chrono::steady_clock::now();
-    int n_vertices;
-    int n_edges;
+    ullong n_vertices;
+    ullong n_edges;
     std::string input_filename;
     bool verbose = false;
     bool bin = false;
@@ -52,15 +53,23 @@ int main(int argc, char **argv){
             exit(EXIT_FAILURE);
         }
 
-        fin.read((char*)&n_vertices, sizeof(int));
-        fin.read((char*)&n_edges, sizeof(int));
+        // NOTE: File encoding is 4-byte not 8-byte
+        {
+            uint n, m;
+            fin.read((char*)&n, sizeof(unsigned int));
+            fin.read((char*)&m, sizeof(unsigned int));
+            n_vertices = n;
+            n_edges = m;
+        }
 
         std::cout << "Reading graph on " << n_vertices << " vertices and " << n_edges << " edges..." << std::endl;
 
         // Read all edges from file
         edgelist = (Edge*) malloc(n_edges * sizeof(Edge));
-        for (int i = 0; i < n_edges; i++) {
-            fin.read((char*)&edgelist[i], 3 * sizeof(int));
+        for (ullong i = 0; i < n_edges; i++) {
+            fin.read((char*)&edgelist[i].u, sizeof(uint));
+            fin.read((char*)&edgelist[i].v, sizeof(uint));
+            fin.read((char*)&edgelist[i].weight, sizeof(uint));
         }
     } else {
         std::ifstream fin(input_filename);
@@ -77,7 +86,7 @@ int main(int argc, char **argv){
 
         // Read all edges from file
         edgelist = (Edge*) malloc(n_edges * sizeof(Edge));
-        for (int i = 0; i < n_edges; i++) {
+        for (ullong i = 0; i < n_edges; i++) {
             fin >> edgelist[i].u;
             fin >> edgelist[i].v;
             fin >> edgelist[i].weight;
@@ -102,7 +111,7 @@ int main(int argc, char **argv){
 
         if (verbose) {
             std::cout << "[";
-            for (int i = 0; i < n_edges; i++) {
+            for (ullong i = 0; i < n_edges; i++) {
                 if (result.mst[i] == 1) {
                     const Edge& e = edgelist[i];
                     std::cout << "(" << e.u << ", " << e.v << ", " << e.weight << "), ";

@@ -12,11 +12,15 @@
 
 // TODO: Is it even helpful to think of this as a block for this problem?
 // Define constants for CUDA threadblocks
-#define THREADBLOCK_WIDTH (8)
-#define THREADBLOCK_HEIGHT (8)
-#define BLOCKSIZE (THREADBLOCK_WIDTH * THREADBLOCK_HEIGHT)
+#define BLOCKSIZE (256)
 
-#define NO_EDGE (INT_MAX)
+#define NBLOCKS_ASSIGN_CHEAPEST (8)
+#define NBLOCKS_OTHER (1)
+
+#define NTHREADS_ASSIGN_CHEAPEST (NBLOCKS_ASSIGN_CHEAPEST * BLOCKSIZE)
+#define NTHREADS_OTHER (NBLOCKS_OTHER * BLOCKSIZE)
+
+#define NO_EDGE (ULONG_MAX)
 
 ////////////////////////////////////////////////////////////////////////////////////////
 // All cuda kernels here
@@ -28,7 +32,7 @@ struct GlobalConstants {
 };
 
 // Another global value
-__device__ int n_components;
+__device__ ullong n_components;
 
 // Global variable that is in scope, but read-only, for all cuda
 // kernels.  The __constant__ modifier designates this variable will
@@ -37,59 +41,63 @@ __device__ int n_components;
 // place to put read-only variables).
 __constant__ GlobalConstants cuConstRendererParams;
 
-__device__ inline int get_component(Vertex* componentlist, const int i) {
-    int curr = componentlist[i].component;
+__device__ inline ullong get_component(Vertex* componentlist, const ullong i) {
+    ullong curr = componentlist[i].component;
 
     while (componentlist[curr].component != curr) {
         curr = componentlist[curr].component;
     }
 
+    // Flatten component trees
+    if (componentlist[i].component != curr) {
+        atomicExch(&componentlist[i].component, curr);
+    }
     return curr;
 }
 
-__device__ inline void merge_components(Vertex* componentlist, const int i,
-                                        const int j) {
-    int u = i;
-    int v = j;
-    int old;
+__device__ inline void merge_components(Vertex* componentlist, const ullong i,
+                                        const ullong j) {
+    ullong u = i;
+    ullong v = j;
+    ullong old;
     do {
         u = get_component(componentlist, u);
         old = atomicCAS(&(componentlist[u].component), u, v);
     } while (old != u);
 }
 
-__global__ void init_arrs(const int n_vertices, Vertex* vertices) {
-    const int threadID = threadIdx.y * blockDim.x + threadIdx.x;
+__global__ void init_arrs(const ullong n_vertices, Vertex* vertices) {
+    const int threadID = threadIdx.x + blockIdx.x * blockDim.x;
 
-    const int start = (threadID * n_vertices / BLOCKSIZE);
-    const int end = ((threadID + 1) * n_vertices / BLOCKSIZE);
+    const ullong start = (threadID * n_vertices / NTHREADS_OTHER);
+    const ullong end = ((threadID + 1) * n_vertices / NTHREADS_OTHER);
 
     // initialize components
-    for (int i = start; i < end; i++) {
+    for (ullong i = start; i < end; i++) {
         vertices[i] = Vertex{i, NO_EDGE};
     }
 }
 
-__global__ void reset_arrs(const int n_vertices, Vertex* vertices) {
-    const int threadID = threadIdx.y * blockDim.x + threadIdx.x;
+__global__ void reset_arrs(const ullong n_vertices, Vertex* vertices) {
+    const int threadID = threadIdx.x + blockIdx.x * blockDim.x;
 
-    const int start = (threadID * n_vertices / BLOCKSIZE);
-    const int end = ((threadID + 1) * n_vertices / BLOCKSIZE);
+    const ullong start = (threadID * n_vertices / NTHREADS_OTHER);
+    const ullong end = ((threadID + 1) * n_vertices / NTHREADS_OTHER);
 
     // initialize components
-    for (int i = start; i < end; i++) {
+    for (ullong i = start; i < end; i++) {
         vertices[i].cheapest_edge = NO_EDGE;
     }
 }
 
 __global__ void assign_cheapest(Vertex* vertices, Edge* edgelist,
-                                const int n_edges) {
-    const int threadID = threadIdx.y * blockDim.x + threadIdx.x;
+                                const ullong n_edges) {
+    const int threadID = threadIdx.x + blockIdx.x * blockDim.x;
 
-    const int start = (threadID * n_edges) / BLOCKSIZE;
-    const int end = ((threadID + 1) * n_edges) / BLOCKSIZE;
+    const ullong start = (threadID * n_edges) / NTHREADS_ASSIGN_CHEAPEST;
+    const ullong end = ((threadID + 1) * n_edges) / NTHREADS_ASSIGN_CHEAPEST;
 
-    for (int i = start; i < end; i++) {
+    for (ullong i = start; i < end; i++) {
         Edge& e = edgelist[i];
         e.u = get_component(vertices, e.u);
         e.v = get_component(vertices, e.v);
@@ -100,7 +108,7 @@ __global__ void assign_cheapest(Vertex* vertices, Edge* edgelist,
         }
 
         // Atomic update cheapest_edge[u]
-        int old = vertices[e.u].cheapest_edge;
+        ullong old = vertices[e.u].cheapest_edge;
         while (old == NO_EDGE || e.weight < edgelist[old].weight) {
             old = atomicCAS(&vertices[e.u].cheapest_edge, old, i);
         }
@@ -114,16 +122,16 @@ __global__ void assign_cheapest(Vertex* vertices, Edge* edgelist,
 }
 
 __global__ void update_mst(Vertex* vertices, const Edge* edgelist, MST* mst,
-                           const int n_vertices, const int n_edges) {
-    const int threadID = threadIdx.y * blockDim.x + threadIdx.x;
+                           const ullong n_vertices, const ullong n_edges) {
+    const int threadID = threadIdx.x + blockIdx.x * blockDim.x;
 
-    const int start = (threadID * n_vertices) / BLOCKSIZE;
-    const int end = ((threadID + 1) * n_vertices) / BLOCKSIZE;
+    const ullong start = (threadID * n_vertices) / NTHREADS_OTHER;
+    const ullong end = ((threadID + 1) * n_vertices) / NTHREADS_OTHER;
 
-    int n_unions = 0;
+    ullong n_unions = 0;
     // Connect newest edges to MST
-    for (int i = start; i < end; i++) {
-        const int edge_ind = vertices[i].cheapest_edge;
+    for (ullong i = start; i < end; i++) {
+        const ullong edge_ind = vertices[i].cheapest_edge;
 
         if (edge_ind == NO_EDGE) {
             continue;
@@ -143,7 +151,12 @@ __global__ void update_mst(Vertex* vertices, const Edge* edgelist, MST* mst,
     }
 
     // TODO better method available?
-    atomicSub(&n_components, n_unions);
+    ullong old = n_components;
+    ullong expected;
+    do {
+        expected = old;
+        old = atomicCAS(&n_components, old, old-n_unions);
+    } while (old != expected);
 }
 
 void initGPUs() {
@@ -181,7 +194,7 @@ void initGPUs() {
     }
 }
 
-MST boruvka_mst(const int n_vertices, const int n_edges, const Edge* edgelist) {
+MST boruvka_mst(const ullong n_vertices, const ullong n_edges, const Edge* edgelist) {
     MST mst;
     mst.weight = 0;
     int* mst_tree = (int*)malloc(sizeof(int) * n_edges);
@@ -204,23 +217,23 @@ MST boruvka_mst(const int n_vertices, const int n_edges, const Edge* edgelist) {
 
     // Run Boruvka's in parallel
 
-    int n_comp = n_vertices;
-    int n_comp_old;
+    ullong n_comp = n_vertices;
+    ullong n_comp_old;
 
     // Initialise global
-    cudaMemcpyToSymbol(n_components, &n_comp, sizeof(int));
+    cudaMemcpyToSymbol(n_components, &n_comp, sizeof(ullong));
 
-    init_arrs<<<1, BLOCKSIZE>>>(n_vertices, device_vertices);
+    init_arrs<<<NBLOCKS_OTHER, BLOCKSIZE>>>(n_vertices, device_vertices);
 
     do {
         n_comp_old = n_comp;
 
-        reset_arrs<<<1, BLOCKSIZE>>>(n_vertices, device_vertices);
-        assign_cheapest<<<1, BLOCKSIZE>>>(device_vertices, device_edgelist,
+        reset_arrs<<<NBLOCKS_OTHER, BLOCKSIZE>>>(n_vertices, device_vertices);
+        assign_cheapest<<<NBLOCKS_ASSIGN_CHEAPEST, BLOCKSIZE>>>(device_vertices, device_edgelist,
                                           n_edges);
-        update_mst<<<1, BLOCKSIZE>>>(device_vertices, device_edgelist,
+        update_mst<<<NBLOCKS_OTHER, BLOCKSIZE>>>(device_vertices, device_edgelist,
                                      device_mst, n_vertices, n_edges);
-        cudaMemcpyFromSymbol(&n_comp, n_components, sizeof(int));
+        cudaMemcpyFromSymbol(&n_comp, n_components, sizeof(ullong));
 
         // debug
         // Vertex * ts = (Vertex *) malloc(sizeof(Vertex) * n_vertices);
@@ -251,7 +264,7 @@ MST boruvka_mst(const int n_vertices, const int n_edges, const Edge* edgelist) {
 
     // TODO: Move this into the kernel that performs a scan
     // Compute final weight
-    for (int i = 0; i < n_edges; i++) {
+    for (ullong i = 0; i < n_edges; i++) {
         if (mst.mst[i] == 1) {
             const Edge& e = edgelist[i];
             mst.weight += e.weight;
