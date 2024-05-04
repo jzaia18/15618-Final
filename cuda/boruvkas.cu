@@ -47,16 +47,27 @@ __constant__ GlobalConstants cuConstGraphParams;
 __device__ inline ullong get_component(Vertex* componentlist, const ullong i) {
     ullong curr = componentlist[i].component;
 
+    // while (componentlist[curr].component != curr) {
+    //     curr = componentlist[curr].component;
+    // }
+
+    return curr;
+}
+
+__device__ inline void flatten_component(Vertex* componentlist, const ullong i) {
+    ullong curr = componentlist[i].component;
+
     while (componentlist[curr].component != curr) {
         curr = componentlist[curr].component;
     }
 
     // Flatten component trees
-    if (componentlist[i].component != curr) {
-        atomicExch(&componentlist[i].component, curr);
-    }
-    return curr;
+    componentlist[i].component = curr;
+    // if (componentlist[i].component != curr) {
+    //     atomicExch(&componentlist[i].component, curr);
+    // }
 }
+
 
 __device__ inline void merge_components(Vertex* componentlist, const ullong i,
                                         const ullong j) {
@@ -96,6 +107,7 @@ __global__ void reset_arrs() {
     // initialize components
     for (ullong i = start; i < end; i++) {
         vertices[i].cheapest_edge = NO_EDGE;
+        flatten_component(vertices, i);
     }
 }
 
