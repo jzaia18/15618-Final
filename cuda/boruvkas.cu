@@ -4,8 +4,12 @@
 #include <driver_functions.h>
 #include <limits.h>
 #include <stdio.h>
+#include <thrust/device_ptr.h>
+#include <thrust/device_vector.h>
+#include <thrust/remove.h>
 
 #include <chrono>
+#include <cub/device/device_select.cuh>
 #include <string>
 
 #include "boruvkas.h"
@@ -30,13 +34,18 @@
 struct GlobalConstants {
     Vertex* vertices;
     Edge* edges;
-    int* mst_tree;
+    char* mst_tree;
     ullong n_vertices;
-    ullong n_edges;
+};
+struct NotInMST {
+    __device__ __forceinline__ bool operator()(const Edge& a) const {
+        return a.u == a.v;
+    }
 };
 
 // Another global value
 __device__ ullong n_components;
+__device__ ullong remaining_edges;
 
 // Global variable that is in scope, but read-only, for all cuda
 // kernels.  The __constant__ modifier designates this variable will
@@ -45,7 +54,8 @@ __device__ ullong n_components;
 // place to put read-only variables).
 __constant__ GlobalConstants cuConstGraphParams;
 
-__device__ inline ullong get_component(Vertex* componentlist, const ullong i) {
+__device__ inline ullong get_component(const ullong i) {
+    auto componentlist = cuConstGraphParams.vertices;
     ullong curr = componentlist[i].component;
 
     while (componentlist[curr].component != curr) {
@@ -59,13 +69,13 @@ __device__ inline ullong get_component(Vertex* componentlist, const ullong i) {
     return curr;
 }
 
-__device__ inline void merge_components(Vertex* componentlist, const ullong i,
-                                        const ullong j) {
+__device__ inline void merge_components(const ullong i, const ullong j) {
+    auto componentlist = cuConstGraphParams.vertices;
     ullong u = i;
     ullong v = j;
     ullong old;
     do {
-        u = get_component(componentlist, u);
+        u = get_component(u);
         old = atomicCAS(&(componentlist[u].component), u, v);
     } while (old != u);
 }
@@ -104,7 +114,7 @@ __global__ void assign_cheapest() {
     const int threadID = threadIdx.x + blockIdx.x * blockDim.x;
 
     // Renaming to make life easier, this gets compiled away
-    const ullong n_edges = cuConstGraphParams.n_edges;
+    const ullong n_edges = remaining_edges;
     Vertex* const vertices = cuConstGraphParams.vertices;
     Edge* const edges = cuConstGraphParams.edges;
 
@@ -113,9 +123,6 @@ __global__ void assign_cheapest() {
 
     for (ullong i = start; i < end; i++) {
         Edge& e = edges[i];
-        e.u = get_component(vertices, e.u);
-        e.v = get_component(vertices, e.v);
-
         // Skip edges that connect a component to itself
         if (e.u == e.v) {
             continue;
@@ -160,13 +167,12 @@ __global__ void update_mst() {
 
         // If this edge is covered twice, only union when i == u (u < v is
         // assumed)
-        if (edge_ptr.v == i &&
-            edge_ind == vertices[edge_ptr.u].cheapest_edge) {
+        if (edge_ptr.v == i && edge_ind == vertices[edge_ptr.u].cheapest_edge) {
             continue;
         }
 
-        cuConstGraphParams.mst_tree[edge_ind] = 1;
-        merge_components(vertices, edge_ptr.u, edge_ptr.v);
+        cuConstGraphParams.mst_tree[edge_ptr.orig_index] = 1;
+        merge_components(edge_ptr.u, edge_ptr.v);
         n_unions++;
     }
 
@@ -175,8 +181,24 @@ __global__ void update_mst() {
     ullong expected;
     do {
         expected = old;
-        old = atomicCAS(&n_components, old, old-n_unions);
+        old = atomicCAS(&n_components, old, old - n_unions);
     } while (old != expected);
+}
+
+__global__ void flatten_UF() {
+    const int threadID = threadIdx.x + blockIdx.x * blockDim.x;
+
+    const ullong n_edges = remaining_edges;
+    Edge* const edges = cuConstGraphParams.edges;
+
+    const ullong start = (threadID * n_edges) / NTHREADS_ASSIGN_CHEAPEST;
+    const ullong end = ((threadID + 1) * n_edges) / NTHREADS_ASSIGN_CHEAPEST;
+
+    for (ullong i = start; i < end; i++) {
+        Edge& e = edges[i];
+        e.u = get_component(e.u);
+        e.v = get_component(e.v);
+    }
 }
 
 void initGPUs() {
@@ -214,17 +236,14 @@ void initGPUs() {
     }
 }
 
-MST boruvka_mst(const ullong n_vertices, const ullong n_edges, const Edge* edgelist) {
-    MST mst;
-    mst.weight = 0;
-    int* mst_tree = (int*)malloc(sizeof(int) * n_edges);
-
-    int* device_mst_tree;
+MST boruvka_mst(const ullong n_vertices, const ullong n_edges,
+                const Edge* edgelist) {
+    char* device_mst_tree;
     Vertex* device_vertices;
     Edge* device_edgelist;
 
-    cudaMalloc(&device_mst_tree, sizeof(int) * n_edges);
-    cudaMemset(device_mst_tree, 0, sizeof(int) * n_edges);
+    cudaMalloc(&device_mst_tree, sizeof(char) * n_edges);
+    cudaMemset(device_mst_tree, 0, sizeof(char) * n_edges);
 
     cudaMalloc(&device_vertices, sizeof(Vertex) * n_vertices);
 
@@ -232,21 +251,25 @@ MST boruvka_mst(const ullong n_vertices, const ullong n_edges, const Edge* edgel
     cudaMemcpy(device_edgelist, edgelist, sizeof(Edge) * n_edges,
                cudaMemcpyHostToDevice);
 
+    thrust::device_ptr<Edge> d_edge_ptr(device_edgelist);
+    thrust::device_vector<Edge> d_edge_vector(d_edge_ptr, d_edge_ptr + n_edges);
+
     GlobalConstants params;
     params.vertices = device_vertices;
     params.edges = device_edgelist;
     params.mst_tree = device_mst_tree;
-    params.n_edges = n_edges;
     params.n_vertices = n_vertices;
 
     cudaMemcpyToSymbol(cuConstGraphParams, &params, sizeof(GlobalConstants));
 
     // Run Boruvka's in parallel
     ullong n_comp = n_vertices;
+    ullong r_edges = n_edges;
     ullong n_comp_old;
 
     // Initialise global
     cudaMemcpyToSymbol(n_components, &n_comp, sizeof(ullong));
+    cudaMemcpyToSymbol(remaining_edges, &r_edges, sizeof(ullong));
 
     init_arrs<<<NBLOCKS_OTHER, BLOCKSIZE>>>();
 
@@ -254,29 +277,49 @@ MST boruvka_mst(const ullong n_vertices, const ullong n_edges, const Edge* edgel
         n_comp_old = n_comp;
 
         reset_arrs<<<NBLOCKS_OTHER, BLOCKSIZE>>>();
+        printf("1\n");
         assign_cheapest<<<NBLOCKS_ASSIGN_CHEAPEST, BLOCKSIZE>>>();
+        printf("2\n");
         update_mst<<<NBLOCKS_OTHER, BLOCKSIZE>>>();
+        flatten_UF<<<NBLOCKS_ASSIGN_CHEAPEST, BLOCKSIZE>>>();
+        printf("4\n");
+
+        auto new_end = thrust::remove_if(d_edge_ptr, d_edge_ptr + r_edges, NotInMST());
+        // r_edges = thrust::distance(d_edge_ptr, new_end);
+        // cudaMemcpyToSymbol(remaining_edges, &r_edges, sizeof(ullong));
+
+        // Filter edges
         cudaMemcpyFromSymbol(&n_comp, n_components, sizeof(ullong));
+        // cudaMemcpyFromSymbol(&r_edges, remaining_edges, sizeof(ullong));
 
         // debug
-        // Vertex * ts = (Vertex *) malloc(sizeof(Vertex) * n_vertices);
+        // Vertex* ts = (Vertex*)malloc(sizeof(Vertex) * n_vertices);
         // cudaMemcpy(ts, device_vertices, sizeof(Vertex) * n_vertices,
-        // cudaMemcpyDeviceToHost); for (int i = 0; i < n_vertices; i++) {
-        //     printf("%d ", ts[i].cheapest_edge);
+        //            cudaMemcpyDeviceToHost);
+        // for (int i = 0; i < n_vertices; i++) {
+        //     printf("%llu ", ts[i].cheapest_edge);
         // }
+        // free(ts);
         // printf("\n");
-        // Edge * ed = (Edge *) malloc(sizeof(Edge) * n_vertices);
-        // cudaMemcpy(ed, device_edgelist, sizeof(Edge) * n_edges,
-        // cudaMemcpyDeviceToHost); for (int i = 0; i < n_edges; i++) {
+        // Edge* ed = (Edge*)malloc(sizeof(Edge) * r_edges);
+        // cudaMemcpy(ed, device_edgelist, sizeof(Edge) * r_edges,
+        //            cudaMemcpyDeviceToHost);
+        // for (int i = 0; i < r_edges; i++) {
         //     printf("%d-%d-%d ", ed[i].u, ed[i].v, ed[i].weight);
         // }
-        // printf("nc %d\n", n_comp);
+        // free(ed);
+        // printf("\n");
+        printf("re %llu\n", r_edges);
+        printf("nc %llu\n", n_comp);
     } while (n_comp != n_comp_old && n_comp > 1);
 
+    MST mst;
+    mst.weight = 0;
+    mst.mst = (char*)malloc(sizeof(char) * n_edges);
+
     // Copy run results off of device
-    cudaMemcpy(mst_tree, device_mst_tree, sizeof(int) * n_edges,
+    cudaMemcpy(mst.mst, device_mst_tree, sizeof(char) * n_edges,
                cudaMemcpyDeviceToHost);
-    mst.mst = mst_tree;
 
     // Clean up device memory
     cudaFree(device_mst_tree);

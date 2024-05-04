@@ -90,6 +90,7 @@ int main(int argc, char **argv){
             fin >> edgelist[i].u;
             fin >> edgelist[i].v;
             fin >> edgelist[i].weight;
+            edgelist[i].orig_index = i;
         }
     }
 

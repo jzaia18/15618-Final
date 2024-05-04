@@ -6,6 +6,7 @@ struct Edge {
     uint u;
     uint v;
     uint weight;
+    uint orig_index;
 };
 
 struct Vertex {
@@ -16,7 +17,7 @@ struct Vertex {
 };
 
 struct MST {
-    int* mst; // stores indices of chosen edges
+    char* mst; // stores indices of chosen edges
     ullong weight;
 };
 
