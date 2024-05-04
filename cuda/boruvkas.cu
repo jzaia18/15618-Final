@@ -11,13 +11,9 @@
 #include "boruvkas.h"
 
 // Define constants for CUDA threadblocks
-#define BLOCKSIZE (256)
-
-#define NBLOCKS_ASSIGN_CHEAPEST (16)
-#define NBLOCKS_OTHER (4)
-
-#define NTHREADS_ASSIGN_CHEAPEST (NBLOCKS_ASSIGN_CHEAPEST * BLOCKSIZE)
-#define NTHREADS_OTHER (NBLOCKS_OTHER * BLOCKSIZE)
+#define BLOCKSIZE (1024)
+#define NBLOCKS (1)
+#define NTHREADS (NBLOCKS * BLOCKSIZE)
 
 #define NO_EDGE (ULONG_MAX)
 
@@ -47,9 +43,9 @@ __constant__ GlobalConstants cuConstGraphParams;
 __device__ inline ullong get_component(Vertex* componentlist, const ullong i) {
     ullong curr = componentlist[i].component;
 
-    // while (componentlist[curr].component != curr) {
-    //     curr = componentlist[curr].component;
-    // }
+    while (componentlist[curr].component != curr) {
+        curr = componentlist[curr].component;
+    }
 
     return curr;
 }
@@ -80,14 +76,14 @@ __device__ inline void merge_components(Vertex* componentlist, const ullong i,
     } while (old != u);
 }
 
-__global__ void init_arrs() {
+__device__ void init_arrs() {
     const int threadID = threadIdx.x + blockIdx.x * blockDim.x;
 
     const ullong n_vertices = cuConstGraphParams.n_vertices;
     Vertex* const vertices = cuConstGraphParams.vertices;
 
-    const ullong start = (threadID * n_vertices / NTHREADS_OTHER);
-    const ullong end = ((threadID + 1) * n_vertices / NTHREADS_OTHER);
+    const ullong start = (threadID * n_vertices / NTHREADS);
+    const ullong end = ((threadID + 1) * n_vertices / NTHREADS);
 
     // initialize components
     for (ullong i = start; i < end; i++) {
@@ -95,14 +91,14 @@ __global__ void init_arrs() {
     }
 }
 
-__global__ void reset_arrs() {
+__device__ void reset_arrs() {
     const int threadID = threadIdx.x + blockIdx.x * blockDim.x;
 
     const ullong n_vertices = cuConstGraphParams.n_vertices;
     Vertex* const vertices = cuConstGraphParams.vertices;
 
-    const ullong start = (threadID * n_vertices / NTHREADS_OTHER);
-    const ullong end = ((threadID + 1) * n_vertices / NTHREADS_OTHER);
+    const ullong start = (threadID * n_vertices / NTHREADS);
+    const ullong end = ((threadID + 1) * n_vertices / NTHREADS);
 
     // initialize components
     for (ullong i = start; i < end; i++) {
@@ -111,7 +107,7 @@ __global__ void reset_arrs() {
     }
 }
 
-__global__ void assign_cheapest() {
+__device__ void assign_cheapest() {
     const int threadID = threadIdx.x + blockIdx.x * blockDim.x;
 
     // Renaming to make life easier, this gets compiled away
@@ -119,8 +115,8 @@ __global__ void assign_cheapest() {
     Vertex* const vertices = cuConstGraphParams.vertices;
     Edge* const edges = cuConstGraphParams.edges;
 
-    const ullong start = (threadID * n_edges) / NTHREADS_ASSIGN_CHEAPEST;
-    const ullong end = ((threadID + 1) * n_edges) / NTHREADS_ASSIGN_CHEAPEST;
+    const ullong start = (threadID * n_edges) / NTHREADS;
+    const ullong end = ((threadID + 1) * n_edges) / NTHREADS;
 
     for (ullong i = start; i < end; i++) {
         Edge& e = edges[i];
@@ -147,7 +143,7 @@ __global__ void assign_cheapest() {
     }
 }
 
-__global__ void update_mst() {
+__device__ void update_mst() {
     const int threadID = threadIdx.x + blockIdx.x * blockDim.x;
 
     // Renaming to make life easier, this gets compiled away
@@ -155,8 +151,8 @@ __global__ void update_mst() {
     Vertex* const vertices = cuConstGraphParams.vertices;
     Edge* const edges = cuConstGraphParams.edges;
 
-    const ullong start = (threadID * n_vertices) / NTHREADS_OTHER;
-    const ullong end = ((threadID + 1) * n_vertices) / NTHREADS_OTHER;
+    const ullong start = (threadID * n_vertices) / NTHREADS;
+    const ullong end = ((threadID + 1) * n_vertices) / NTHREADS;
 
     ullong n_unions = 0;
     // Connect newest edges to MST
@@ -188,6 +184,29 @@ __global__ void update_mst() {
         expected = old;
         old = atomicCAS(&n_components, old, old-n_unions);
     } while (old != expected);
+}
+
+__global__ void combinedBoruvkas() {
+    init_arrs();
+    __syncthreads();
+
+    ullong n_comp = n_components;
+    ullong n_comp_old;
+
+    do {
+        n_comp_old = n_comp;
+
+        reset_arrs();
+        __syncthreads();
+
+        assign_cheapest();
+        __syncthreads();
+
+        update_mst();
+        __syncthreads();
+
+        n_comp = n_components; // get local copy of device mem
+    } while (n_comp != n_comp_old && n_comp > 1);
 }
 
 void initGPUs() {
@@ -252,37 +271,11 @@ MST boruvka_mst(const ullong n_vertices, const ullong n_edges, const Edge* edgel
 
     cudaMemcpyToSymbol(cuConstGraphParams, &params, sizeof(GlobalConstants));
 
-    // Run Boruvka's in parallel
-    ullong n_comp = n_vertices;
-    ullong n_comp_old;
-
     // Initialise global
-    cudaMemcpyToSymbol(n_components, &n_comp, sizeof(ullong));
+    cudaMemcpyToSymbol(n_components, &n_vertices, sizeof(ullong));
 
-    init_arrs<<<NBLOCKS_OTHER, BLOCKSIZE>>>();
-
-    do {
-        n_comp_old = n_comp;
-
-        reset_arrs<<<NBLOCKS_OTHER, BLOCKSIZE>>>();
-        assign_cheapest<<<NBLOCKS_ASSIGN_CHEAPEST, BLOCKSIZE>>>();
-        update_mst<<<NBLOCKS_OTHER, BLOCKSIZE>>>();
-        cudaMemcpyFromSymbol(&n_comp, n_components, sizeof(ullong));
-
-        // debug
-        // Vertex * ts = (Vertex *) malloc(sizeof(Vertex) * n_vertices);
-        // cudaMemcpy(ts, device_vertices, sizeof(Vertex) * n_vertices,
-        // cudaMemcpyDeviceToHost); for (int i = 0; i < n_vertices; i++) {
-        //     printf("%d ", ts[i].cheapest_edge);
-        // }
-        // printf("\n");
-        // Edge * ed = (Edge *) malloc(sizeof(Edge) * n_vertices);
-        // cudaMemcpy(ed, device_edgelist, sizeof(Edge) * n_edges,
-        // cudaMemcpyDeviceToHost); for (int i = 0; i < n_edges; i++) {
-        //     printf("%d-%d-%d ", ed[i].u, ed[i].v, ed[i].weight);
-        // }
-        // printf("nc %d\n", n_comp);
-    } while (n_comp != n_comp_old && n_comp > 1);
+    // Run all device code
+    combinedBoruvkas<<<NBLOCKS, BLOCKSIZE>>>();
 
     // Copy run results off of device
     cudaMemcpy(mst_tree, device_mst_tree, sizeof(int) * n_edges,
