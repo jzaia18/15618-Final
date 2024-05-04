@@ -24,6 +24,38 @@ def get_outputs(_stdout: bytes) -> None:
         'weights': weights,
     }
 
+def print_stats(all_metrics: dict[Any, Any], baseline: str) -> None:
+    for impl in all_metrics:
+        if impl == baseline:
+            continue
+
+        print(f'Performance of {impl}:')
+        all_tests = all_metrics[impl]
+        comp_speedups = []
+        tot_speedups = []
+        for (test, metrics) in all_tests.items():
+            print(f'  {test} ({len(metrics["compute_times"])} runs):')
+
+            if 'weight' not in metrics or metrics['weight'] != metrics['weight']:
+                print('Inconsistent result on this test')
+                continue
+
+            compute_time = metrics['avg_compute_time']
+            init_time = metrics['init_time']
+            tot_time = compute_time + init_time
+            comp_speedup = all_metrics[baseline][test]['avg_compute_time'] / metrics['avg_compute_time']
+            tot_speedup = (all_metrics[baseline][test]['avg_compute_time'] + all_metrics[baseline][test]['init_time'])/ (metrics['init_time'] + metrics['avg_compute_time'])
+            comp_speedups.append(comp_speedup)
+            tot_speedups.append(tot_speedup)
+            print(f'    compute time = {compute_time:0.4f}s,  init time = {init_time:0.4f}s,  total time = {tot_time:0.4f}s')
+            print(f'    computation time speedup={comp_speedup:0.2f}x, total time speedup={tot_speedup:0.2f}x')
+            print()
+
+
+        print(f'Average computation time speedup of {impl}: {sum(comp_speedups)/len(comp_speedups):0.2f}')
+        print(f'Average total time speedup of {impl}: {sum(tot_speedups)/len(tot_speedups):0.2f}')
+        print()
+
 if __name__ == '__main__':
     import argparse
     import os
@@ -77,9 +109,11 @@ if __name__ == '__main__':
 
         return inner
 
+    # Which impl is the one being benchmarked against
+    BASELINE = 'Sequential'
 
     impls = {
-        'Sequential': '../sequential/boruvkas',
+        BASELINE: '../sequential/boruvkas',
         # 'CPU (parlaylib) parallel': '../parlay/boruvkas',
         'GPU (CUDA) parallel': '../cuda/boruvkas',
     }
@@ -133,6 +167,9 @@ if __name__ == '__main__':
             ),
     }
 
+    all_metrics = {
+        impl: {} for impl in impls.keys()
+    }
 
     for (test_name, test_gen) in tests.items():
         print(f'Generating graph for test "{test_name}"...')
@@ -146,10 +183,22 @@ if __name__ == '__main__':
                 file_flag = '-bf'
             else:
                 file_flag = '-f'
-            result = subprocess.run([exe, file_flag, TEMPFILE_PATH, '-r', str(args.reps)],
-                                    capture_output=True)
-            x = get_outputs(result.stdout)
+            proc_output = subprocess.run([exe, file_flag, TEMPFILE_PATH, '-r', str(args.reps)],
+                                         capture_output=True)
+            metrics = get_outputs(proc_output.stdout)
 
-            print('   ', x)
+            metrics['avg_compute_time'] = sum(metrics['compute_times'])/len(metrics['compute_times'])
+
+            if min(metrics['weights']) == max(metrics['weights']):
+                metrics['weight'] = min(metrics['weights'])
+                del metrics['weights']
+            else:
+                print(f'!!! Error on {impl}: inconsistent outputs')
+
+            all_metrics[impl][test_name] = metrics
+
+            print('   ', metrics)
             print()
-        print('\n')
+        print()
+
+    print_stats(all_metrics, BASELINE)
