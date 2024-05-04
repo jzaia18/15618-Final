@@ -67,9 +67,7 @@ int main(int argc, char **argv){
         // Read all edges from file
         edgelist = (Edge*) malloc(n_edges * sizeof(Edge));
         for (ullong i = 0; i < n_edges; i++) {
-            fin.read((char*)&edgelist[i].u, sizeof(uint));
-            fin.read((char*)&edgelist[i].v, sizeof(uint));
-            fin.read((char*)&edgelist[i].weight, sizeof(uint));
+            fin.read((char*)&edgelist[i], 3 * sizeof(uint));
         }
     } else {
         std::ifstream fin(input_filename);
