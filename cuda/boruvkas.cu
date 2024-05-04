@@ -10,12 +10,11 @@
 
 #include "boruvkas.h"
 
-// TODO: Is it even helpful to think of this as a block for this problem?
 // Define constants for CUDA threadblocks
 #define BLOCKSIZE (256)
 
-#define NBLOCKS_ASSIGN_CHEAPEST (8)
-#define NBLOCKS_OTHER (1)
+#define NBLOCKS_ASSIGN_CHEAPEST (16)
+#define NBLOCKS_OTHER (4)
 
 #define NTHREADS_ASSIGN_CHEAPEST (NBLOCKS_ASSIGN_CHEAPEST * BLOCKSIZE)
 #define NTHREADS_OTHER (NBLOCKS_OTHER * BLOCKSIZE)
