@@ -65,9 +65,13 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(prog='mstbench',
                                      description='Benchmark different parallel MST implementations')
-    parser.add_argument('-r', '--reps',
+    parser.add_argument('--baseline-reps',
                         default=5,
-                        help='the number of times to repeat each experiment',
+                        help='the number of times to repeat each experiment for the sequential baseline',
+                        type=int)
+    parser.add_argument('--parallel-reps',
+                        default=5,
+                        help='the number of times to repeat each experiment for the parallel implementations',
                         type=int)
     parser.add_argument('-s', '--seed',
                         default=0,
@@ -165,6 +169,16 @@ if __name__ == '__main__':
             create_arb_weight_test(nx.connected_caveman_graph,
                                    (7500, 70),
             ),
+
+        'Binomial Graph, p=8e-5 n=350000':
+            create_arb_weight_test(nx.fast_gnp_random_graph,
+                                   (350000, 8e-5),
+            ),
+
+        'Binomial Graph, p=5e-4 n=350000':
+            create_arb_weight_test(nx.fast_gnp_random_graph,
+                                   (350000, 5e-4),
+            ),
     }
 
     all_metrics = {
@@ -183,7 +197,13 @@ if __name__ == '__main__':
                 file_flag = '-bf'
             else:
                 file_flag = '-f'
-            proc_output = subprocess.run([exe, file_flag, TEMPFILE_PATH, '-r', str(args.reps)],
+
+            if impl == BASELINE:
+                nreps = str(args.baseline_reps)
+            else:
+                nreps = str(args.parallel_reps)
+
+            proc_output = subprocess.run([exe, file_flag, TEMPFILE_PATH, '-r', nreps],
                                          capture_output=True)
             metrics = get_outputs(proc_output.stdout)
 
