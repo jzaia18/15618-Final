@@ -11,10 +11,10 @@
 #include "boruvkas.h"
 
 // Define constants for CUDA threadblocks
-#define BLOCKSIZE (256)
+#define BLOCKSIZE (1024)
 
-#define NBLOCKS_ASSIGN_CHEAPEST (16)
-#define NBLOCKS_OTHER (4)
+#define NBLOCKS_ASSIGN_CHEAPEST (128)
+#define NBLOCKS_OTHER (128)
 
 #define NTHREADS_ASSIGN_CHEAPEST (NBLOCKS_ASSIGN_CHEAPEST * BLOCKSIZE)
 #define NTHREADS_OTHER (NBLOCKS_OTHER * BLOCKSIZE)
@@ -35,7 +35,7 @@ struct GlobalConstants {
 };
 
 // Another global value
-__device__ ullong n_components;
+__device__ ullong n_unions_total;
 
 // Global variable that is in scope, but read-only, for all cuda
 // kernels.  The __constant__ modifier designates this variable will
@@ -44,12 +44,39 @@ __device__ ullong n_components;
 // place to put read-only variables).
 __constant__ GlobalConstants cuConstGraphParams;
 
+__device__ inline int edge_cmp(const Edge& lhs, const Edge& rhs)
+{
+    if (lhs.weight < rhs.weight) {
+        return -1;
+    }
+    if (lhs.weight > rhs.weight) {
+        return 1;
+    }
+
+    if (lhs.u < rhs.u) {
+        return -1;
+    }
+    if (lhs.u > rhs.u) {
+        return 1;
+    }
+
+    if (lhs.v < rhs.v) {
+        return -1;
+    }
+    if (lhs.v > rhs.v) {
+        return 1;
+    }
+
+    // edges identical
+    return 0;
+}
+
 __device__ inline ullong get_component(Vertex* componentlist, const ullong i) {
     ullong curr = componentlist[i].component;
 
-    // while (componentlist[curr].component != curr) {
-    //     curr = componentlist[curr].component;
-    // }
+    while (componentlist[curr].component != curr) {
+        curr = componentlist[curr].component;
+    }
 
     return curr;
 }
@@ -73,6 +100,7 @@ __device__ inline void merge_components(Vertex* componentlist, const ullong i,
                                         const ullong j) {
     ullong u = i;
     ullong v = j;
+    // const ullong v = get_component(componentlist, j);
     ullong old;
     do {
         u = get_component(componentlist, u);
@@ -133,16 +161,24 @@ __global__ void assign_cheapest() {
         }
 
         // Atomic update cheapest_edge[u]
-        ullong old = vertices[e.u].cheapest_edge;
-        while (old == NO_EDGE || e.weight < edges[old].weight) {
-            old = atomicCAS(&vertices[e.u].cheapest_edge, old, i);
+        ullong expected = vertices[e.u].cheapest_edge;
+        ullong old;
+        while (expected == NO_EDGE || edge_cmp(e, edges[expected]) < 0) {
+            old = atomicCAS(&vertices[e.u].cheapest_edge, expected, i);
+            if (expected == old) {
+                break;
+            }
+            expected = old;
         }
 
         // Atomic update cheapest_edge[v]
-        old = vertices[e.v].cheapest_edge;
-        while (old == NO_EDGE ||
-               e.weight < cuConstGraphParams.edges[old].weight) {
-            old = atomicCAS(&vertices[e.v].cheapest_edge, old, i);
+        expected = vertices[e.v].cheapest_edge;
+        while (expected == NO_EDGE || edge_cmp(e, edges[expected]) < 0) {
+            old = atomicCAS(&vertices[e.v].cheapest_edge, expected, i);
+            if (expected == old) {
+                break;
+            }
+            expected = old;
         }
     }
 }
@@ -158,7 +194,7 @@ __global__ void update_mst() {
     const ullong start = (threadID * n_vertices) / NTHREADS_OTHER;
     const ullong end = ((threadID + 1) * n_vertices) / NTHREADS_OTHER;
 
-    ullong n_unions = 0;
+    ullong n_unions_made = 0;
     // Connect newest edges to MST
     for (ullong i = start; i < end; i++) {
         const ullong edge_ind = vertices[i].cheapest_edge;
@@ -178,16 +214,10 @@ __global__ void update_mst() {
 
         cuConstGraphParams.mst_tree[edge_ind] = 1;
         merge_components(vertices, edge_ptr.u, edge_ptr.v);
-        n_unions++;
+        n_unions_made++;
     }
 
-    // TODO better method available?
-    ullong old = n_components;
-    ullong expected;
-    do {
-        expected = old;
-        old = atomicCAS(&n_components, old, old-n_unions);
-    } while (old != expected);
+    atomicAdd(&n_unions_total, n_unions_made);
 }
 
 void initGPUs() {
@@ -253,21 +283,21 @@ MST boruvka_mst(const ullong n_vertices, const ullong n_edges, const Edge* edgel
     cudaMemcpyToSymbol(cuConstGraphParams, &params, sizeof(GlobalConstants));
 
     // Run Boruvka's in parallel
-    ullong n_comp = n_vertices;
-    ullong n_comp_old;
+    ullong n_unions = 0;
+    ullong n_unions_old;
 
     // Initialise global
-    cudaMemcpyToSymbol(n_components, &n_comp, sizeof(ullong));
+    cudaMemcpyToSymbol(n_unions_total, &n_unions, sizeof(ullong));
 
     init_arrs<<<NBLOCKS_OTHER, BLOCKSIZE>>>();
 
     do {
-        n_comp_old = n_comp;
+        n_unions_old = n_unions;
 
         reset_arrs<<<NBLOCKS_OTHER, BLOCKSIZE>>>();
         assign_cheapest<<<NBLOCKS_ASSIGN_CHEAPEST, BLOCKSIZE>>>();
         update_mst<<<NBLOCKS_OTHER, BLOCKSIZE>>>();
-        cudaMemcpyFromSymbol(&n_comp, n_components, sizeof(ullong));
+        cudaMemcpyFromSymbol(&n_unions, n_unions_total, sizeof(ullong));
 
         // debug
         // Vertex * ts = (Vertex *) malloc(sizeof(Vertex) * n_vertices);
@@ -282,7 +312,7 @@ MST boruvka_mst(const ullong n_vertices, const ullong n_edges, const Edge* edgel
         //     printf("%d-%d-%d ", ed[i].u, ed[i].v, ed[i].weight);
         // }
         // printf("nc %d\n", n_comp);
-    } while (n_comp != n_comp_old && n_comp > 1);
+    } while (n_unions != n_unions_old && n_unions < n_vertices - 1);
 
     // Copy run results off of device
     cudaMemcpy(mst_tree, device_mst_tree, sizeof(int) * n_edges,
