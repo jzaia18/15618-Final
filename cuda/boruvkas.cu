@@ -44,8 +44,13 @@ __device__ ullong n_unions_total;
 // place to put read-only variables).
 __constant__ GlobalConstants cuConstGraphParams;
 
-__device__ inline int edge_cmp(const Edge& lhs, const Edge& rhs)
+__device__ inline int edge_cmp(const Edge* edges, const ullong i, const ullong j)
 {
+    if (i == j) return 0;
+
+    const Edge& lhs = edges[i];
+    const Edge& rhs = edges[j];
+
     if (lhs.weight < rhs.weight) {
         return -1;
     }
@@ -53,22 +58,10 @@ __device__ inline int edge_cmp(const Edge& lhs, const Edge& rhs)
         return 1;
     }
 
-    if (lhs.u < rhs.u) {
+    if (i < j) {
         return -1;
     }
-    if (lhs.u > rhs.u) {
-        return 1;
-    }
-
-    if (lhs.v < rhs.v) {
-        return -1;
-    }
-    if (lhs.v > rhs.v) {
-        return 1;
-    }
-
-    // edges identical
-    return 0;
+    return 1;
 }
 
 __device__ inline ullong get_component(Vertex* componentlist, const ullong i) {
@@ -163,7 +156,7 @@ __global__ void assign_cheapest() {
         // Atomic update cheapest_edge[u]
         ullong expected = vertices[e.u].cheapest_edge;
         ullong old;
-        while (expected == NO_EDGE || edge_cmp(e, edges[expected]) < 0) {
+        while (expected == NO_EDGE || edge_cmp(edges, i, expected) < 0) {
             old = atomicCAS(&vertices[e.u].cheapest_edge, expected, i);
             if (expected == old) {
                 break;
@@ -173,7 +166,7 @@ __global__ void assign_cheapest() {
 
         // Atomic update cheapest_edge[v]
         expected = vertices[e.v].cheapest_edge;
-        while (expected == NO_EDGE || edge_cmp(e, edges[expected]) < 0) {
+        while (expected == NO_EDGE || edge_cmp(edges, i, expected) < 0) {
             old = atomicCAS(&vertices[e.v].cheapest_edge, expected, i);
             if (expected == old) {
                 break;
