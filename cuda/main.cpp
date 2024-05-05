@@ -4,6 +4,8 @@
 #include <iomanip>
 #include <iostream>
 #include <string>
+#include <vector>
+#include <algorithm>
 
 #include <sys/types.h>
 #include <unistd.h>
@@ -82,7 +84,7 @@ int main(int argc, char **argv){
         std::cout << "Reading graph on " << n_vertices << " vertices and " << n_edges << " edges..." << std::endl;
 
         // Read all edges from file
-        edgelist = (Edge*) malloc(n_edges * sizeof(Edge));
+        edgelist = (Edge*) malloc(2 * n_edges * sizeof(Edge));
         for (ullong i = 0; i < n_edges; i++) {
             uint u, v, w;
             fin >> u;
@@ -92,6 +94,33 @@ int main(int argc, char **argv){
             edgelist[i].v = v;
             edgelist[i].weight = w;
         }
+
+        // Convert to directed edge list (without sorting)
+        std::vector<std::vector<std::pair<uint, uint>>> adjacencyList(n_vertices);
+
+        for (uint i = 0; i < n_edges; i++) {
+            Edge &e = edgelist[i];
+            uint u = e.u;
+            uint v = e.v;
+            uint w = e.weight;
+            
+            adjacencyList[u].push_back(std::make_pair(v, w));
+            adjacencyList[v].push_back(std::make_pair(u, w));
+        }
+
+        int e_index = 0;
+        for (uint u = 0; u < n_vertices; u++) {
+            auto neis = adjacencyList[u];
+            for (auto [v, w]: neis) {
+                edgelist[e_index].u = u;
+                edgelist[e_index].v = v;
+                edgelist[e_index].weight = w;
+                e_index++;
+            }
+        }
+
+        n_edges *= 2;
+
     }
 
     initGPUs();

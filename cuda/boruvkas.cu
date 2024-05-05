@@ -168,16 +168,6 @@ __global__ void assign_cheapest() {
             }
             expected = old;
         }
-
-        // Atomic update cheapest_edge[v]
-        expected = vertices[e.v].cheapest_edge;
-        while (expected == NO_EDGE || edge_cmp(edges, i, expected) < 0) {
-            old = atomicCAS(&vertices[e.v].cheapest_edge, expected, i);
-            if (expected == old) {
-                break;
-            }
-            expected = old;
-        }
     }
 }
 
@@ -203,10 +193,9 @@ __global__ void update_mst() {
 
         const Edge& edge_ptr = edges[edge_ind];
 
-        // If this edge is covered twice, only union when i == u (u < v is
+        // If this edge is covered twice, only union when u < v (i == u is
         // assumed)
-        if (edge_ptr.v == i &&
-            edge_ind == vertices[edge_ptr.u].cheapest_edge) {
+        if (i > edge_ptr.v && edges[vertices[edge_ptr.v].cheapest_edge].v == i) {
             continue;
         }
 
