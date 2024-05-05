@@ -97,33 +97,33 @@ int main(int argc, char **argv){
             edgelist[i].weight = w;
         }
 
-        // Convert to directed edge list (without sorting)
-        std::vector<std::vector<std::pair<uint, uint>>> adjacencyList(n_vertices);
-
-        for (uint i = 0; i < n_edges; i++) {
-            Edge &e = edgelist[i];
-            uint u = e.u;
-            uint v = e.v;
-            uint w = e.weight;
-            
-            adjacencyList[u].push_back(std::make_pair(v, w));
-            adjacencyList[v].push_back(std::make_pair(u, w));
-        }
-
-        int e_index = 0;
-        for (uint u = 0; u < n_vertices; u++) {
-            auto neis = adjacencyList[u];
-            for (auto [v, w]: neis) {
-                edgelist[e_index].u = u;
-                edgelist[e_index].v = v;
-                edgelist[e_index].weight = w;
-                e_index++;
-            }
-        }
-
-        n_edges *= 2;
-
     }
+
+    // Convert to directed edge list (without sorting)
+    std::vector<std::vector<std::tuple<uint, uint, uint>>> adjacencyList(n_vertices);
+    Edge * directed_edge_list = (Edge*) malloc(2 * n_edges * sizeof(Edge));
+
+    for (uint i = 0; i < n_edges; i++) {
+        Edge &e = edgelist[i];
+        uint u = e.u;
+        uint v = e.v;
+        uint w = e.weight;
+        adjacencyList[u].push_back(std::make_tuple(v, w, i));
+        adjacencyList[v].push_back(std::make_tuple(u, w, i));
+    }
+
+    int e_index = 0;
+    for (uint u = 0; u < n_vertices; u++) {
+        auto neis = adjacencyList[u];
+        for (auto [v, w, i]: neis) {
+            directed_edge_list[e_index].u = u;
+            directed_edge_list[e_index].v = v;
+            directed_edge_list[e_index].weight = w;
+            directed_edge_list[e_index].index = i;
+            e_index++;
+        }
+    }
+
 
     initGPUs();
 
@@ -133,7 +133,7 @@ int main(int argc, char **argv){
     for (uint i = 0; i < reps; i++) {
         const auto compute_start = std::chrono::steady_clock::now();
 
-        MST result = boruvka_mst(n_vertices, n_edges, edgelist);
+        MST result = boruvka_mst(n_vertices, n_edges, directed_edge_list, edgelist);
 
         const double compute_time = std::chrono::duration_cast<std::chrono::duration<double>>(std::chrono::steady_clock::now() - compute_start).count();
         std::cout << "Computation time (sec): " << compute_time << '\n';
@@ -154,6 +154,7 @@ int main(int argc, char **argv){
     }
 
     free(edgelist);
+    free(directed_edge_list);
 
     return EXIT_SUCCESS;
 }

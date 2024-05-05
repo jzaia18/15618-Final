@@ -58,7 +58,7 @@ __device__ inline int edge_cmp(const Edge* edges, const ullong i, const ullong j
         return 1;
     }
 
-    if (i < j) {
+    if (lhs.index < rhs.index) {
         return -1;
     }
     return 1;
@@ -139,7 +139,7 @@ __global__ void assign_cheapest() {
     const int block_width = blockDim.x;
 
     // Renaming to make life easier, this gets compiled away
-    const ullong n_edges = cuConstGraphParams.n_edges;
+    const ullong n_edges = 2 * cuConstGraphParams.n_edges;
     Vertex* const vertices = cuConstGraphParams.vertices;
     Edge* const edges = cuConstGraphParams.edges;
 
@@ -198,10 +198,10 @@ __global__ void update_mst() {
         if (i > edge_ptr.v && edges[vertices[edge_ptr.v].cheapest_edge].v == i) {
             continue;
         }
+        cuConstGraphParams.mst_tree[edge_ptr.index] = 1;
 
         const ullong j = (i == edge_ptr.u? edge_ptr.v : edge_ptr.u); // this is the other index
 
-        cuConstGraphParams.mst_tree[edge_ind] = 1;
         merge_components(vertices, i, j);
         n_unions_made++;
     }
@@ -244,7 +244,8 @@ void initGPUs() {
     }
 }
 
-MST boruvka_mst(const ullong n_vertices, const ullong n_edges, const Edge* edgelist) {
+MST boruvka_mst(const ullong n_vertices, const ullong n_edges, const Edge* directed_edgelist, const Edge* edgelist) {
+    // n_edges is number of undirected edges
     MST mst;
     mst.weight = 0;
     char* mst_tree = (char*) malloc(sizeof(char) * n_edges);
@@ -258,8 +259,8 @@ MST boruvka_mst(const ullong n_vertices, const ullong n_edges, const Edge* edgel
 
     cudaMalloc(&device_vertices, sizeof(Vertex) * n_vertices);
 
-    cudaMalloc(&device_edgelist, sizeof(Edge) * n_edges);
-    cudaMemcpy(device_edgelist, edgelist, sizeof(Edge) * n_edges,
+    cudaMalloc(&device_edgelist, sizeof(Edge) * 2 * n_edges);
+    cudaMemcpy(device_edgelist, directed_edgelist, sizeof(Edge) * 2 * n_edges,
                cudaMemcpyHostToDevice);
 
     GlobalConstants params;

@@ -6,6 +6,7 @@ struct __attribute__((packed)) Edge {
     uint u;
     uint v;
     uint weight;
+    uint index;
 };
 
 struct Vertex {
@@ -20,5 +21,5 @@ struct MST {
     ullong weight;
 };
 
-MST boruvka_mst(const ullong n_vertices, const ullong n_edges, const Edge* edgelist);
+MST boruvka_mst(const ullong n_vertices, const ullong n_edges, const Edge* directed_edge_list, const Edge* edgelist);
 void initGPUs();
