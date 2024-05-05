@@ -1,8 +1,25 @@
 #include <atomic>
 
-#include "parlaylib/examples/helper/union_find.h"
 #include "parlaylib/include/parlay/primitives.h"
 #include "parlaylib/include/parlay/sequence.h"
+
+#define NO_EDGE -1
+template <class vertex>
+struct union_find {
+    parlay::sequence<std::atomic<vertex>> parents;
+
+    // initialize n elements all as roots
+    union_find(size_t n)
+        : parents(parlay::tabulate<std::atomic<vertex>>(
+              n, [](long x) { return x; })) {}
+
+    vertex find(vertex p) {
+        while (parents[p] != p) {
+            p = parents[p];
+        }
+        return p;
+    }
+};
 
 template <typename vertex, typename wtype>
 using edge = std::tuple<vertex, vertex, wtype>;
@@ -16,23 +33,19 @@ auto boruvka(const parlay::sequence<edge<vertex, wtype>>& E, vertex n) {
 
     while (curr_edges.size() > 0) {
         auto best_edge_index =
-            parlay::tabulate<std::atomic<int>>(n, [](long i) { return -1; });
+            parlay::tabulate<std::atomic<int>>(n, [](long i) { return NO_EDGE; });
         parlay::parallel_for(0, curr_edges.size(), [&](int i) {
             auto [u, v, w] = curr_edges[i];
 
             int index = best_edge_index[u].load();
-            while ((index == -1 || w < std::get<2>(curr_edges[index])) &&
-                   (best_edge_index[u].load() != index ||
-                    best_edge_index[u].compare_exchange_strong(index, i))) {
-                index = best_edge_index[u].load();
-            }
+            while ((index == NO_EDGE || w < std::get<2>(curr_edges[index])) &&
+                   !best_edge_index[u].compare_exchange_strong(index, i))
+                ;
 
             index = best_edge_index[v].load();
-            while ((index == -1 || w < std::get<2>(curr_edges[index])) &&
-                   (best_edge_index[v].load() != index ||
-                    best_edge_index[v].compare_exchange_strong(index, i))) {
-                index = best_edge_index[v].load();
-            }
+            while ((index == NO_EDGE || w < std::get<2>(curr_edges[index])) &&
+                   !best_edge_index[v].compare_exchange_strong(index, i))
+                ;
         });
 
         sol = parlay::append(
@@ -48,14 +61,9 @@ auto boruvka(const parlay::sequence<edge<vertex, wtype>>& E, vertex n) {
                     return std::optional<edge<vertex, wtype>>{};
 
                 // UF.link(UF.find(u), v);
-                bool done = false;
-                vertex root = -1;
                 auto un = u;
-                while (!done) {
-                    un = UF.find(un);
-                    done = UF.parents[un] == root &&
-                           UF.parents[un].compare_exchange_strong(root, v);
-                }
+                do un = UF.find(un);
+                while (!UF.parents[un].compare_exchange_strong(un, v));
 
                 // add edge
                 return std::optional{curr_edges[edge_index]};
