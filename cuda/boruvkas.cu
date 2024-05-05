@@ -104,30 +104,34 @@ __device__ inline void merge_components(Vertex* componentlist, const ullong i,
 
 __global__ void init_arrs() {
     const int threadID = threadIdx.x + blockIdx.x * blockDim.x;
+    const int blockID = blockIdx.x;
+    const int block_width = blockDim.x;
 
     const ullong n_vertices = cuConstGraphParams.n_vertices;
     Vertex* const vertices = cuConstGraphParams.vertices;
 
-    const ullong start = (threadID * n_vertices / NTHREADS_OTHER);
-    const ullong end = ((threadID + 1) * n_vertices / NTHREADS_OTHER);
+    const ullong block_start = (blockID * n_vertices) / NBLOCKS_OTHER;
+    const ullong block_end = ((blockID + 1) * n_vertices) / NBLOCKS_OTHER;
 
     // initialize components
-    for (ullong i = start; i < end; i++) {
+    for (ullong i = block_start + threadIdx.x; i < block_end; i += block_width) {
         vertices[i] = Vertex{i, NO_EDGE};
     }
 }
 
 __global__ void reset_arrs() {
     const int threadID = threadIdx.x + blockIdx.x * blockDim.x;
+    const int blockID = blockIdx.x;
+    const int block_width = blockDim.x;
 
     const ullong n_vertices = cuConstGraphParams.n_vertices;
     Vertex* const vertices = cuConstGraphParams.vertices;
 
-    const ullong start = (threadID * n_vertices / NTHREADS_OTHER);
-    const ullong end = ((threadID + 1) * n_vertices / NTHREADS_OTHER);
+    const ullong block_start = (blockID * n_vertices) / NBLOCKS_OTHER;
+    const ullong block_end = ((blockID + 1) * n_vertices) / NBLOCKS_OTHER;
 
     // initialize components
-    for (ullong i = start; i < end; i++) {
+    for (ullong i = block_start + threadIdx.x; i < block_end; i += block_width) {
         vertices[i].cheapest_edge = NO_EDGE;
         flatten_component(vertices, i);
     }
@@ -183,18 +187,20 @@ __global__ void assign_cheapest() {
 
 __global__ void update_mst() {
     const int threadID = threadIdx.x + blockIdx.x * blockDim.x;
+    const int blockID = blockIdx.x;
+    const int block_width = blockDim.x;
 
     // Renaming to make life easier, this gets compiled away
     const ullong n_vertices = cuConstGraphParams.n_vertices;
     Vertex* const vertices = cuConstGraphParams.vertices;
     Edge* const edges = cuConstGraphParams.edges;
 
-    const ullong start = (threadID * n_vertices) / NTHREADS_OTHER;
-    const ullong end = ((threadID + 1) * n_vertices) / NTHREADS_OTHER;
+    const ullong block_start = (blockID * n_vertices) / NBLOCKS_OTHER;
+    const ullong block_end = ((blockID + 1) * n_vertices) / NBLOCKS_OTHER;
 
     ullong n_unions_made = 0;
     // Connect newest edges to MST
-    for (ullong i = start; i < end; i++) {
+    for (ullong i = block_start + threadIdx.x; i < block_end; i += block_width) {
         const ullong edge_ind = vertices[i].cheapest_edge;
 
         if (edge_ind == NO_EDGE) {
