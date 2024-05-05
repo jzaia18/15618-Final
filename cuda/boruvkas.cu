@@ -64,41 +64,64 @@ __device__ inline int edge_cmp(const Edge* edges, const ullong i, const ullong j
     return 1;
 }
 
-__device__ inline ullong get_component(Vertex* componentlist, const ullong i) {
-    ullong curr = componentlist[i].component;
-
-    while (componentlist[curr].component != curr) {
-        curr = componentlist[curr].component;
-    }
-
-    return curr;
+__device__ inline  uint parent(Vertex* componentlist, uint id) {
+    return (uint) componentlist[id].component;
 }
 
-__device__ inline void flatten_component(Vertex* componentlist, const ullong i) {
-    ullong curr = componentlist[i].component;
-
-    while (componentlist[curr].component != curr) {
-        curr = componentlist[curr].component;
-    }
-
-    // Flatten component trees
-    componentlist[i].component = curr;
-    // if (componentlist[i].component != curr) {
-    //     atomicExch(&componentlist[i].component, curr);
-    // }
+__device__ inline uint rank(Vertex* componentlist, uint id) {
+    return ((uint) (componentlist[id].component >> 32)) & 0x7FFFFFFFu;
 }
 
+__device__ inline uint get_component(Vertex* componentlist, uint id) {
+    while (id != parent(componentlist, id)) {
+            ullong value = componentlist[id].component;
+            uint new_parent = parent(componentlist, (uint) value);
+            ullong new_value =
+                (value & 0xFFFFFFFF00000000ULL) | new_parent;
+            /* Try to update parent (may fail, that's ok) */
+            if (value != new_value)
+                atomicCAS(&componentlist[id].component, value, new_value);
+            id = new_parent;
+        }
+        return id;
+}
 
-__device__ inline void merge_components(Vertex* componentlist, const ullong i,
-                                        const ullong j) {
-    ullong u = i;
-    ullong v = j;
-    // const ullong v = get_component(componentlist, j);
-    ullong old;
-    do {
-        u = get_component(componentlist, u);
-        old = atomicCAS(&(componentlist[u].component), u, v);
-    } while (old != u);
+__device__ inline uint merge_components(Vertex* componentlist, uint id1, uint id2) {
+    for (;;) {
+        id1 = get_component(componentlist, id1);
+        id2 = get_component(componentlist, id2);
+
+        if (id1 == id2)
+            return id1;
+
+        uint r1 = rank(componentlist, id1), r2 = rank(componentlist, id2);
+
+        if (r1 > r2 || (r1 == r2 && id1 < id2)) {
+            uint temp = r1;
+            r1 = r2;
+            r2 = temp;
+            temp = id1;
+            id1 = id2;
+            id2 = temp;
+        }
+
+        ullong oldEntry = ((ullong) r1 << 32) | id1;
+        ullong newEntry = ((ullong) r1 << 32) | id2;
+
+        if (atomicCAS(&componentlist[id1].component, oldEntry, newEntry) != oldEntry) {
+            continue;
+        }
+
+        if (r1 == r2) {
+            oldEntry = ((ullong) r2 << 32) | id2;
+            newEntry = ((ullong) (r2+1) << 32) | id2;
+            /* Try to update the rank (may fail, that's ok) */
+            atomicCAS(&componentlist[id2].component, oldEntry, newEntry);
+        }
+
+        break;
+    }
+    return id2;
 }
 
 __global__ void init_arrs() {
@@ -128,7 +151,7 @@ __global__ void reset_arrs() {
     // initialize components
     for (ullong i = start; i < end; i++) {
         vertices[i].cheapest_edge = NO_EDGE;
-        flatten_component(vertices, i);
+       // flatten_component(vertices, i);
     }
 }
 
