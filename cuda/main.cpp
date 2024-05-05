@@ -11,7 +11,7 @@
 #include "boruvkas.h"
 
 int main(int argc, char **argv){
-    const auto init_start = std::chrono::steady_clock::now();
+    const auto read_start = std::chrono::steady_clock::now();
     ullong n_vertices;
     ullong n_edges;
     std::string input_filename;
@@ -93,6 +93,10 @@ int main(int argc, char **argv){
             edgelist[i].weight = w;
         }
     }
+
+    const double read_time = std::chrono::duration_cast<std::chrono::duration<double>>(std::chrono::steady_clock::now() - read_start).count();
+    std::cout << "File read time (sec): " << std::fixed << std::setprecision(10) << read_time << '\n';
+    const auto init_start = std::chrono::steady_clock::now();
 
     initGPUs();
 

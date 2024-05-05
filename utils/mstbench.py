@@ -12,6 +12,9 @@ def get_outputs(_stdout: bytes) -> None:
     match = re.search(r'Initialization time \(sec\): ([\d\.]*)', stdout)
     init_time = float(match.group(1))
 
+    match = re.search(r'File read time \(sec\): ([\d\.]*)', stdout)
+    read_time = float(match.group(1))
+
     compute_times = re.findall(r'Computation time \(sec\): ([\d\.]*)', stdout)
     compute_times = [float(x) for x in compute_times]
 
@@ -20,6 +23,7 @@ def get_outputs(_stdout: bytes) -> None:
 
     return {
         'init_time': init_time,
+        'read_time': read_time,
         'compute_times': compute_times,
         'weights': weights,
     }
@@ -33,6 +37,7 @@ def print_stats(all_metrics: dict[Any, Any], baseline: str) -> None:
         all_tests = all_metrics[impl]
         comp_speedups = []
         tot_speedups = []
+        tot_no_read_speedups = []
         for (test, metrics) in all_tests.items():
             print(f'  {test} ({len(metrics["compute_times"])} runs):')
 
@@ -42,18 +47,26 @@ def print_stats(all_metrics: dict[Any, Any], baseline: str) -> None:
 
             compute_time = metrics['avg_compute_time']
             init_time = metrics['init_time']
-            tot_time = compute_time + init_time
+            read_time = metrics['read_time']
+            tot_no_read_time = compute_time + init_time
+            tot_time = tot_no_read_time + read_time
+
             comp_speedup = all_metrics[baseline][test]['avg_compute_time'] / metrics['avg_compute_time']
-            tot_speedup = (all_metrics[baseline][test]['avg_compute_time'] + all_metrics[baseline][test]['init_time'])/ (metrics['init_time'] + metrics['avg_compute_time'])
+            tot_no_read_speedup = (all_metrics[baseline][test]['avg_compute_time'] + all_metrics[baseline][test]['init_time']) / tot_no_read_time
+            tot_speedup = (all_metrics[baseline][test]['avg_compute_time'] + all_metrics[baseline][test]['init_time'] + all_metrics[baseline][test]['read_time']) / tot_time
+
             comp_speedups.append(comp_speedup)
+            tot_no_read_speedups.append(tot_no_read_speedup)
             tot_speedups.append(tot_speedup)
-            print(f'    compute time = {compute_time:0.4f}s,  init time = {init_time:0.4f}s,  total time = {tot_time:0.4f}s')
-            print(f'    computation time speedup={comp_speedup:0.2f}x, total time speedup={tot_speedup:0.2f}x')
+
+            print(f'    Compute time = {compute_time:0.4f}s,  Init time = {init_time:0.4f}s,  Read time = {read_time:0.4f}s,  Total time = {tot_time:0.4f}s, Total time (without read) = {tot_no_read_time:0.4f}s')
+            print(f'    Compute speedup={comp_speedup:0.2f}x, Total speedup={tot_speedup:0.2f}x, Total (without read) speedup={tot_no_read_speedup:0.2f}x')
             print()
 
 
         print(f'Average computation time speedup of {impl}: {sum(comp_speedups)/len(comp_speedups):0.2f}')
         print(f'Average total time speedup of {impl}: {sum(tot_speedups)/len(tot_speedups):0.2f}')
+        print(f'Average total time (without read) speedup of {impl}: {sum(tot_no_read_speedups)/len(tot_no_read_speedups):0.2f}')
         print()
 
 if __name__ == '__main__':
@@ -66,11 +79,11 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(prog='mstbench',
                                      description='Benchmark different parallel MST implementations')
     parser.add_argument('--baseline-reps',
-                        default=5,
+                        default=3,
                         help='the number of times to repeat each experiment for the sequential baseline',
                         type=int)
     parser.add_argument('--parallel-reps',
-                        default=5,
+                        default=10,
                         help='the number of times to repeat each experiment for the parallel implementations',
                         type=int)
     parser.add_argument('-s', '--seed',
@@ -133,52 +146,52 @@ if __name__ == '__main__':
                                    (250000, [1, 2]),
             ),
 
-        '5-degree Circulant n=500000':
-            create_arb_weight_test(nx.circulant_graph,
-                                   (500000, [1, 2, 3, 4, 5]),
-            ),
+        # '5-degree Circulant n=500000':
+        #     create_arb_weight_test(nx.circulant_graph,
+        #                            (500000, [1, 2, 3, 4, 5]),
+        #     ),
 
-        'Hypercube d=15, n=32768':
-            create_arb_weight_test(nx.hypercube_graph,
-                                   (15,),
-                                   lambda node: sum(node[-i-1]* 2**i for i in range(len(node))),
-            ),
+        # 'Hypercube d=15, n=32768':
+        #     create_arb_weight_test(nx.hypercube_graph,
+        #                            (15,),
+        #                            lambda node: sum(node[-i-1]* 2**i for i in range(len(node))),
+        #     ),
 
-        'Hypercube d=18, n=262144':
-            create_arb_weight_test(nx.hypercube_graph,
-                                   (18,),
-                                   lambda node: sum(node[-i-1]* 2**i for i in range(len(node))),
-            ),
+        # 'Hypercube d=18, n=262144':
+        #     create_arb_weight_test(nx.hypercube_graph,
+        #                            (18,),
+        #                            lambda node: sum(node[-i-1]* 2**i for i in range(len(node))),
+        #     ),
 
-        'Caveman Graph, 5000 groups of size k=40, n=200000':
-            create_arb_weight_test(nx.caveman_graph,
-                                   (5000, 40),
-            ),
+        # 'Caveman Graph, 5000 groups of size k=40, n=200000':
+        #     create_arb_weight_test(nx.caveman_graph,
+        #                            (5000, 40),
+        #     ),
 
-        'Caveman Graph, 7500 groups of size k=70, n=525000':
-            create_arb_weight_test(nx.caveman_graph,
-                                   (7500, 70),
-            ),
+        # 'Caveman Graph, 7500 groups of size k=70, n=525000':
+        #     create_arb_weight_test(nx.caveman_graph,
+        #                            (7500, 70),
+        #     ),
 
-        'Connected Caveman Graph, 5000 groups of size k=40, n=200000':
-            create_arb_weight_test(nx.connected_caveman_graph,
-                                   (5000, 40),
-            ),
+        # 'Connected Caveman Graph, 5000 groups of size k=40, n=200000':
+        #     create_arb_weight_test(nx.connected_caveman_graph,
+        #                            (5000, 40),
+        #     ),
 
-        'Connected Caveman Graph, 7500 groups of size k=70, n=525000':
-            create_arb_weight_test(nx.connected_caveman_graph,
-                                   (7500, 70),
-            ),
+        # 'Connected Caveman Graph, 7500 groups of size k=70, n=525000':
+        #     create_arb_weight_test(nx.connected_caveman_graph,
+        #                            (7500, 70),
+        #     ),
 
         'Binomial Graph, p=8e-5 n=350000':
             create_arb_weight_test(nx.fast_gnp_random_graph,
                                    (350000, 8e-5),
             ),
 
-        'Binomial Graph, p=5e-4 n=350000':
-            create_arb_weight_test(nx.fast_gnp_random_graph,
-                                   (350000, 5e-4),
-            ),
+        # 'Binomial Graph, p=5e-4 n=350000':
+        #     create_arb_weight_test(nx.fast_gnp_random_graph,
+        #                            (350000, 5e-4),
+        #     ),
     }
 
     all_metrics = {

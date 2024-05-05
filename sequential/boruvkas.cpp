@@ -88,7 +88,7 @@ std::vector<Edge>* boruvka_mst(ulong n_vertices, const std::vector<Edge>& edgeli
 }
 
 int main(int argc, char **argv) {
-    const auto init_start = std::chrono::steady_clock::now();
+    const auto read_start = std::chrono::steady_clock::now();
     ulong n_vertices;
     ulong n_edges;
     std::string input_filename;
@@ -168,6 +168,12 @@ int main(int argc, char **argv) {
             edgelist[i].weight = w;
         }
     }
+
+    const double read_time = std::chrono::duration_cast<std::chrono::duration<double>>(std::chrono::steady_clock::now() - read_start).count();
+    std::cout << "File read time (sec): " << std::fixed << std::setprecision(10) << read_time << '\n';
+    const auto init_start = std::chrono::steady_clock::now();
+
+    // No extra initialization used
 
     const double init_time = std::chrono::duration_cast<std::chrono::duration<double>>(std::chrono::steady_clock::now() - init_start).count();
     std::cout << "Initialization time (sec): " << std::fixed << std::setprecision(10) << init_time << '\n';

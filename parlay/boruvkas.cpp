@@ -16,7 +16,7 @@ using vertex = int;
 using wtype = uint;
 
 int main(int argc, char* argv[]) {
-    const auto init_start = std::chrono::steady_clock::now();
+    const auto read_start = std::chrono::steady_clock::now();
 
     std::string input_filename;
     bool bin = false;
@@ -90,10 +90,15 @@ int main(int argc, char* argv[]) {
         }
     }
 
+    const double read_time = std::chrono::duration_cast<std::chrono::duration<double>>(std::chrono::steady_clock::now() - read_start).count();
+    std::cout << "File read time (sec): " << std::fixed << std::setprecision(10) << read_time << '\n';
+    const auto init_start = std::chrono::steady_clock::now();
+
+    parlay::sequence<vertex> result;
+
     const double init_time = std::chrono::duration_cast<std::chrono::duration<double>>(std::chrono::steady_clock::now() - init_start).count();
     std::cout << "Initialization time (sec): " << std::fixed << std::setprecision(10) << init_time << '\n';
 
-    parlay::sequence<vertex> result;
     for (uint i = 0; i < reps; i++) {
         const auto compute_start = std::chrono::steady_clock::now();
         auto sol = boruvka<vertex, wtype>(E, n);
