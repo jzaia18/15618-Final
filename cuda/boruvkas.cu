@@ -29,7 +29,7 @@
 struct GlobalConstants {
     Vertex* vertices;
     Edge* edges;
-    char* mst_tree;
+    int* mst_tree;
     ullong n_vertices;
     ullong n_edges;
 };
@@ -198,7 +198,9 @@ __global__ void update_mst() {
         if (i > edge_ptr.v && edges[vertices[edge_ptr.v].cheapest_edge].v == i) {
             continue;
         }
-        cuConstGraphParams.mst_tree[edge_ptr.index] = 1;
+        if (atomicExch(&cuConstGraphParams.mst_tree[edge_ptr.index], 1) == 1) {
+            continue;
+        }
 
         const ullong j = (i == edge_ptr.u? edge_ptr.v : edge_ptr.u); // this is the other index
 
@@ -248,14 +250,14 @@ MST boruvka_mst(const ullong n_vertices, const ullong n_edges, const Edge* direc
     // n_edges is number of undirected edges
     MST mst;
     mst.weight = 0;
-    char* mst_tree = (char*) malloc(sizeof(char) * n_edges);
+    int* mst_tree = (int*) malloc(sizeof(int) * n_edges);
 
-    char* device_mst_tree;
+    int* device_mst_tree;
     Vertex* device_vertices;
     Edge* device_edgelist;
 
-    cudaMalloc(&device_mst_tree, sizeof(char) * n_edges);
-    cudaMemset(device_mst_tree, 0, sizeof(char) * n_edges);
+    cudaMalloc(&device_mst_tree, sizeof(int) * n_edges);
+    cudaMemset(device_mst_tree, 0, sizeof(int) * n_edges);
 
     cudaMalloc(&device_vertices, sizeof(Vertex) * n_vertices);
 
@@ -305,7 +307,7 @@ MST boruvka_mst(const ullong n_vertices, const ullong n_edges, const Edge* direc
     } while (n_unions != n_unions_old && n_unions < n_vertices - 1);
 
     // Copy run results off of device
-    cudaMemcpy(mst_tree, device_mst_tree, sizeof(char) * n_edges,
+    cudaMemcpy(mst_tree, device_mst_tree, sizeof(int) * n_edges,
                cudaMemcpyDeviceToHost);
     mst.mst = mst_tree;
 
