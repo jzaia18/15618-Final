@@ -135,16 +135,20 @@ __global__ void reset_arrs() {
 
 __global__ void assign_cheapest() {
     const int threadID = threadIdx.x + blockIdx.x * blockDim.x;
+    const int blockID = blockIdx.x;
+    const int block_width = blockDim.x;
 
     // Renaming to make life easier, this gets compiled away
     const ullong n_edges = cuConstGraphParams.n_edges;
     Vertex* const vertices = cuConstGraphParams.vertices;
     Edge* const edges = cuConstGraphParams.edges;
 
-    const ullong start = (threadID * n_edges) / NTHREADS_ASSIGN_CHEAPEST;
-    const ullong end = ((threadID + 1) * n_edges) / NTHREADS_ASSIGN_CHEAPEST;
+    const ullong block_start = (blockID * n_edges) / NBLOCKS_ASSIGN_CHEAPEST;
+    const ullong block_end = ((blockID + 1) * n_edges) / NBLOCKS_ASSIGN_CHEAPEST;
 
-    for (ullong i = start; i < end; i++) {
+    // Interleave acccess to list to take advantage of SIMD execution within a warp
+    for (ullong i = block_start + threadIdx.x; i < block_end; i += block_width) {
+        __syncwarp();
         Edge& e = edges[i];
         e.u = get_component(vertices, e.u);
         e.v = get_component(vertices, e.v);
