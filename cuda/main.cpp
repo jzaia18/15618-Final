@@ -68,7 +68,9 @@ int main(int argc, char **argv){
 
         // Read all edges from file, this assumes a very particular binary file layout
         edgelist = (Edge*) malloc(n_edges * sizeof(Edge));
-        fin.read((char*)edgelist, n_edges * 3 * sizeof(uint));
+        for (ullong i = 0; i < n_edges; i++) {
+            fin.read((char*)&edgelist[i], 3 * sizeof(uint));
+        }
     } else {
         // NOTE: Only use text files for very small graphs, this is very slow
         std::ifstream fin(input_filename);
