@@ -224,8 +224,87 @@ These files (which were in many cases several hundred megabytes) were then saved
 Since simply reading the file was the source of significant overhead, each implementation would read the file once, and then execute the algorithm a specified number of times. 
 This reduced the amount of time spent loading generated graphs into memory. 
 
-## References
+## Results
 
+### Benchmark Graph Types
+Our benchmark set is composed of various types of graphs generated with random weights from 1 to 1000 on each edge. 
+Edge weights are kept to this range to ensure that ties occur since edges that have tied weights can pose an issue for incorrect implementations. 
+Moreover, edge weights are allowed to vary in this range such that the set of correct MSTs remains small to reduce non-determinism. 
+Further elaboration on each graph type is as follows.
+
+**Circulant Graph:** A set of cycles on n vertices. The d degree circulant links every vertex to all vertices that are ≤ ±d away from the current vertex. It is a very sparse (2d)-regular graph.
+
+**Hypercube Graph:** A graph whose edges form the hypercube in a d-dimensional space. It is a d-regular graph on 2d vertices and is highly sparse.
+
+**Caveman Graph:** A graph composed of several disjoint cliques. The caveman graph actually does not have a minimum-spanning tree, but instead a minimum-spanning forest. Since it is composed of many cliques, it is relatively dense, however the density depends on the number of groups and the size of each group. The caveman graph on g groups of size k has g*k vertices and O(gk2) edges.
+
+**Connected Caveman Graph:** A graph composed of several cliques joined by 2 edges in a cycle. This graph is extremely similar to the caveman graph, however, now 2 edges in each clique are used to connect to other cliques making the entire graph contain a cycle. It has the same number of vertices and edges as the caveman graph.
+
+**Erdős–Rényi Graph:** A random graph of a specified density (sometimes also called the binomial graph). This graph is completely unstructured and is used to represent a more realistic graph layout. It has n vertices and O(pn2) edges. In our case, we consider it a dense graph since we will set p to be comparatively high and the number of edges scales as O(n2).
+
+These graph types include graphs that are both highly structured and unstructured and graphs of both high and low densities. As such, they are a representative sample of several families of graphs that one may want to compute using.
+
+### Speedups on Benchmark Graphs
+All benchmarks were collected on the GHC machines.
+The ParlayLib implementation was run using 8 cores and the CUDA version was run on a GeForce RTX 2080. 
+The graphs are presented with speedup relative to an optimized sequential C++ implementation of Boruvka’s algorithm. 
+Values are the average speedup obtained over 10 repetitions of each implementation on each graph.
+
+(See the [Final Writeup](./final_writeup.pdf) for these graphs and a discussion of their results)
+
+### Scaling Obstacles for CUDA Implementation
+Several obstacles prevent the CUDA implementation from scaling well. 
+Taking the dense graph from the [Final Writeup](./final_writeup.pdf as a case study, we get the following information from nvprof:
+
+```
+            Type  Time(%)      Time  Calls       Avg       Min       Max  Name
+ GPU activities:   44.39%  228.08ms     36  6.3355ms  5.3347ms  9.2597ms  assign_cheapest(void)
+                   43.74%  224.73ms     12  18.727ms  1.1840us  56.243ms  [CUDA memcpy HtoD]
+                   11.12%  57.117ms     40  1.4279ms     704ns  14.289ms  [CUDA memcpy DtoH]
+                    0.60%  3.0905ms     36  85.846us  74.783us  143.01us  update_mst(void)
+                    0.09%  469.79us      4  117.45us  116.42us  118.98us  [CUDA memset]
+                    0.06%  323.77us     36  8.9930us  5.5670us  19.999us  reset_arrs(void)
+                    0.01%  25.984us      4  6.4960us  6.1120us  7.6160us  init_arrs(void)
+      API calls:   41.40%  283.59ms      8  35.448ms  14.694ms  56.250ms  cudaMemcpy
+                   33.84%  231.79ms     36  6.4385ms  5.4279ms  9.4178ms  cudaMemcpyFromSymbol
+                   23.76%  162.78ms     12  13.565ms  51.866us  160.10ms  cudaMalloc
+                    0.86%  5.8650ms     12  488.75us  73.018us  1.0793ms  cudaFree
+                    0.05%  367.92us      8  45.989us  8.0250us  85.208us  cudaMemcpyToSymbol
+                    0.05%  312.70us    112  2.7910us  2.1020us  10.898us  cudaLaunchKernel
+                    0.01%  98.332us    101     973ns      94ns  38.936us  cuDeviceGetAttribute
+                    0.01%  90.189us      1  90.189us  90.189us  90.189us  cudaGetDeviceProperties
+                    0.01%  45.919us      4  11.479us  8.9970us  18.482us  cudaMemset
+                    0.01%  35.013us      1  35.013us  35.013us  35.013us  cuDeviceGetName
+                    0.00%  5.9710us      1  5.9710us  5.9710us  5.9710us  cuDeviceGetPCIBusId
+                    0.00%  3.2280us      1  3.2280us  3.2280us  3.2280us  cudaGetDeviceCount
+                    0.00%     872ns      3     290ns     147ns     578ns  cuDeviceGetCount
+                    0.00%     467ns      2     233ns      95ns     372ns  cuDeviceGet
+                    0.00%     429ns      1     429ns     429ns     429ns  cuDeviceTotalMem
+                    0.00%     224ns      1     224ns     224ns     224ns  cuDeviceGetUuid
+                    0.00%     189ns      1     189ns     189ns     189ns  cuModuleGetLoadingMode
+```
+
+A significant portion of the time spent “processing” this graph is simply getting the graph into GPU memory. 
+That's because this particular input graph is over **half a gigabyte of memory**, so this time must be spent to communicate the full graph to the GPU. 
+Compressed formats for the graph such as adjacency matrices do not parallelize well using Boruvka’s algorithm, however, it might be possible to improve by somehow transmitting the graph to the GPU in a compressed format, and decompressing it in parallel somehow. This was beyond the scope of what we had the time to do for this project.
+
+Most of the rest of the time is spent within the kernel assign_cheapest. 
+This is the kernel that does the most work since it is the only kernel that must iterate over the edge list (in this case the edge list is orders of magnitude larger than the number of vertices). 
+While there are likely further small optimizations we can make to assign_cheapest, Amdahl’s law tells us that this can only serve to give at most approximately a factor of 2 speedup.
+
+Moreover, profiling this run in NCU illuminates that most of the slowdown within assign_cheapest is due to inefficient memory access patterns. 
+We were able to optimize to fix this somewhat, gaining a 3-4x speedup on the various benchmark graphs by interleaving memory accesses within a warp. 
+There are likely other places within the code that could be improved to gain a further speedup (although as mentioned before, we are limited to at most a 2x speedup due to Amdahl’s law). 
+It’s also possible that a portion of these slow memory accesses are due to coherency misses when different threads attempt atomic operations on the same vertex simultaneously. 
+Due to the nature of this algorithm, some of these conflict misses will always exist, although there may be some way to further hide the latency.
+
+### Results Summary
+Overall, this project seems to be a success. 
+The CUDA implementation managed to get a significant speedup over both the sequential and the ParlayLib implementations for sufficiently large graphs. 
+Moreover, a majority of the remaining issues with the speed of the CUDA implementation seem intrinsic to the algorithm or the size of the data being operated on. 
+
+
+## References
 * [A Generic and Highly Efficient Parallel Variant of Boruvka's Algorithm](https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=7092783&tag=1)
 * [Engineering Massively Parallel MST Algorithms](https://arxiv.org/pdf/2302.12199.pdf)
 * [Wait-Free Union-Find implementation](https://github.com/wjakob/dset/tree/master)
