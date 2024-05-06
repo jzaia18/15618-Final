@@ -5,11 +5,17 @@ by Shubham Bhargava & Jake Zaia
 * [Project Source Code](https://github.com/jzaia18/15618-Final)
 * [Proposal Document](./proposal.pdf)
 * [Milestone Report](./milestone.pdf)
+* [Final Writeup](./final_writeup.pdf)
 
 ## Summary
-We are going to implement an algorithm for finding the Minimum Spanning Tree of a graph in parallel.
-We will be implementing this algorithm in both [Parlaylib](https://github.com/cmuparlay/parlaylib) and [CUDA](https://developer.nvidia.com/cuda-zone) and comparing their performance to an optimized sequential version of the same algorithm benchmarked on various graph datasets.
-Moreover, we will be experimenting with different implementations of the concurrent disjoint-set datastructure, which is heavily utilized by Boruvka's algorithm and gathering metrics on how different implementations affect performance.
+We implemented Boruvka’s algorithm in [ParlayLib](https://github.com/cmuparlay/parlaylib) and [CUDA](https://developer.nvidia.com/cuda-zone) achieving average computation speedups of 13.31x and 29.05x on the GHC machines using 8 CPU cores and the GeForce RTX 2080 respectively.
+ParlayLib is a C++ library written by CMU professors to implement algorithms on multi-core machines.
+Boruvka’s algorithm is used to find a Minimum Spanning Forest (MSF) and is more amenable to parallelization than Kruskal’s or Prim’s algorithm.
+We tested the algorithm on a variety of sparse and dense graphs with good performance on both the CPU and GPU.
+The implementations were benchmarked for performance against a sequential C++ implementation of the algorithm, and tested for correctness against a Python implementation of Kruskal’s algorithm.
+The sequential implementation was lightly optimized for running on a single core but was not extensively optimized.
+We also wrote graph generators and a benchmarking framework to support testing the correctness and efficiency of our algorithm. 
+
 
 ## Background
 Finding the Minimum Spanning Tree (MST) is a common graph problem with many applications in approximate algorithms, network design, image segmentation, and taxonomy.
